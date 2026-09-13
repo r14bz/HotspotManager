@@ -1,0 +1,149 @@
+diff --git a/src/app/dashboard/layout.tsx b/src/app/dashboard/layout.tsx
+index 7c3afc4..8a702fe 100644
+--- a/src/app/dashboard/layout.tsx
++++ b/src/app/dashboard/layout.tsx
+@@ -1,6 +1,7 @@
+ "use client"
+ 
+ import LogoutButton from "@/components/LogoutButton"
++import ThemeToggle from "@/components/ThemeToggle"
+ import Link from "next/link"
+ import Image from "next/image"
+ import { usePathname } from "next/navigation"
+@@ -124,6 +125,12 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
+               <span className="md:hidden">
+                 <RouterSwitcher variant="topbar" />
+               </span>
++              <span className="md:hidden">
++                <ThemeToggle variant="dark" />
++              </span>
++              <span className="hidden md:inline-flex">
++                <ThemeToggle variant="light" />
++              </span>
+               <span className="hidden md:inline text-sm text-text-secondary">Admin</span>
+               <LogoutButton />
+             </div>
+diff --git a/src/app/globals.css b/src/app/globals.css
+index 79fcbed..8db0f68 100644
+--- a/src/app/globals.css
++++ b/src/app/globals.css
+@@ -33,6 +33,29 @@
+   --danger-soft: #FCE8E8;
+ }
+ 
++/* Mode gelap — cuma redefinisi token, komponen tidak perlu diubah sama
++   sekali karena semua sudah pakai kelas semantik (bg-paper, text-primary,
++   dst) yang mengacu ke variabel ini. */
++.dark {
++  --paper: #0B1220;
++  --surface: #141B2E;
++  --line: #26314E;
++
++  --text-primary: #EDEFF3;
++  --text-secondary: #9AA5B8;
++  --text-muted: #6B7690;
++
++  /* Di mode gelap, "signal-dark" tidak perlu digelapkan lagi — background
++     sudah gelap, jadi hijau terang (--signal) langsung kontras bagus. */
++  --signal-dark: #2BEE34;
++  --signal-soft: #123321;
++
++  --amber: #F5A524;
++  --amber-soft: #3A2607;
++  --danger: #F87171;
++  --danger-soft: #3A1414;
++}
++
+ @theme inline {
+   --color-ink: var(--ink);
+   --color-ink-soft: var(--ink-soft);
+@@ -59,12 +82,13 @@
+ body {
+   background: var(--paper);
+   color: var(--text-primary);
++  transition: background-color 0.2s ease, color 0.2s ease;
+ }
+ 
+ /* Dot status "online" yang berdenyut halus — dipakai konsisten di seluruh app */
+ @keyframes signal-pulse {
+-  0%, 100% { box-shadow: 0 0 0 0 rgba(15, 158, 151, 0.35); }
+-  50% { box-shadow: 0 0 0 4px rgba(15, 158, 151, 0); }
++  0%, 100% { box-shadow: 0 0 0 0 rgba(43, 238, 52, 0.35); }
++  50% { box-shadow: 0 0 0 4px rgba(43, 238, 52, 0); }
+ }
+ .signal-dot {
+   animation: signal-pulse 2s ease-in-out infinite;
+diff --git a/src/app/layout.tsx b/src/app/layout.tsx
+index 8b85c3d..f62adc4 100644
+--- a/src/app/layout.tsx
++++ b/src/app/layout.tsx
+@@ -24,6 +24,22 @@ export default function RootLayout({
+ }) {
+   return (
+     <html lang="id">
++      <head>
++        {/* Terapkan tema sebelum halaman dirender, supaya tidak kedip
++            terang sesaat sebelum berpindah ke gelap. */}
++        <script
++          dangerouslySetInnerHTML={{
++            __html: `
++              try {
++                var theme = localStorage.getItem('theme');
++                if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
++                  document.documentElement.classList.add('dark');
++                }
++              } catch (e) {}
++            `,
++          }}
++        />
++      </head>
+       <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
+         {children}
+       </body>
+diff --git a/src/components/ThemeToggle.tsx b/src/components/ThemeToggle.tsx
+new file mode 100644
+index 0000000..e04d180
+--- /dev/null
++++ b/src/components/ThemeToggle.tsx
+@@ -0,0 +1,41 @@
++"use client"
++
++import { useEffect, useState } from "react"
++import { Sun, Moon } from "lucide-react"
++
++export default function ThemeToggle({ variant = "light" }: { variant?: "light" | "dark" }) {
++  const [isDark, setIsDark] = useState(false)
++  const [mounted, setMounted] = useState(false)
++
++  useEffect(() => {
++    setMounted(true)
++    setIsDark(document.documentElement.classList.contains("dark"))
++  }, [])
++
++  const toggle = () => {
++    const next = !isDark
++    setIsDark(next)
++    document.documentElement.classList.toggle("dark", next)
++    localStorage.setItem("theme", next ? "dark" : "light")
++  }
++
++  // Hindari mismatch hydration: render placeholder sampai tahu status tema sebenarnya.
++  if (!mounted) {
++    return <div className="w-8 h-8" />
++  }
++
++  const colorClass =
++    variant === "dark"
++      ? "text-white/60 hover:text-white hover:bg-white/5"
++      : "text-text-secondary hover:text-text-primary hover:bg-paper"
++
++  return (
++    <button
++      onClick={toggle}
++      title={isDark ? "Mode terang" : "Mode gelap"}
++      className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${colorClass}`}
++    >
++      {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
++    </button>
++  )
++}

@@ -1,6 +1,7 @@
 "use client"
 
 import LogoutButton from "@/components/LogoutButton"
+import ThemeToggle from "@/components/ThemeToggle"
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
@@ -123,6 +124,12 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
             <div className="flex items-center gap-3">
               <span className="md:hidden">
                 <RouterSwitcher variant="topbar" />
+              </span>
+              <span className="md:hidden">
+                <ThemeToggle variant="dark" />
+              </span>
+              <span className="hidden md:inline-flex">
+                <ThemeToggle variant="light" />
               </span>
               <span className="hidden md:inline text-sm text-text-secondary">Admin</span>
               <LogoutButton />

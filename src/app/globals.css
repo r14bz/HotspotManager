@@ -33,6 +33,29 @@
   --danger-soft: #FCE8E8;
 }
 
+/* Mode gelap — cuma redefinisi token, komponen tidak perlu diubah sama
+   sekali karena semua sudah pakai kelas semantik (bg-paper, text-primary,
+   dst) yang mengacu ke variabel ini. */
+.dark {
+  --paper: #0B1220;
+  --surface: #141B2E;
+  --line: #26314E;
+
+  --text-primary: #EDEFF3;
+  --text-secondary: #9AA5B8;
+  --text-muted: #6B7690;
+
+  /* Di mode gelap, "signal-dark" tidak perlu digelapkan lagi — background
+     sudah gelap, jadi hijau terang (--signal) langsung kontras bagus. */
+  --signal-dark: #2BEE34;
+  --signal-soft: #123321;
+
+  --amber: #F5A524;
+  --amber-soft: #3A2607;
+  --danger: #F87171;
+  --danger-soft: #3A1414;
+}
+
 @theme inline {
   --color-ink: var(--ink);
   --color-ink-soft: var(--ink-soft);
@@ -59,12 +82,13 @@
 body {
   background: var(--paper);
   color: var(--text-primary);
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 /* Dot status "online" yang berdenyut halus — dipakai konsisten di seluruh app */
 @keyframes signal-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(15, 158, 151, 0.35); }
-  50% { box-shadow: 0 0 0 4px rgba(15, 158, 151, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(43, 238, 52, 0.35); }
+  50% { box-shadow: 0 0 0 4px rgba(43, 238, 52, 0); }
 }
 .signal-dot {
   animation: signal-pulse 2s ease-in-out infinite;
