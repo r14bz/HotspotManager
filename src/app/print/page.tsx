@@ -142,7 +142,7 @@ export default function PrintPage() {
                       <img
                         src="/logo/mamanaiy-wordmark.png"
                         alt={brandName}
-                        style={{ height: "16px", marginBottom: "4px", display: "block" }}
+                        style={{ height: "34px", marginBottom: "4px", display: "block" }}
                       />
                     ) : (
                       <div

@@ -1,0 +1,13 @@
+diff --git a/src/app/print/page.tsx b/src/app/print/page.tsx
+index 75d7b17..a809b55 100644
+--- a/src/app/print/page.tsx
++++ b/src/app/print/page.tsx
+@@ -142,7 +142,7 @@ export default function PrintPage() {
+                       <img
+                         src="/logo/mamanaiy-wordmark.png"
+                         alt={brandName}
+-                        style={{ height: "16px", marginBottom: "4px", display: "block" }}
++                        style={{ height: "34px", marginBottom: "4px", display: "block" }}
+                       />
+                     ) : (
+                       <div
