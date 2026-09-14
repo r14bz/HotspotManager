@@ -44,6 +44,13 @@ function buildMonthOptions() {
   return options
 }
 
+function formatTimeLabel(iso: string | null | undefined) {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return null
+  return d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })
+}
+
 function formatDateLabel(value: string) {
   if (!value || value.length < 8) return value
   const parts = value.split("-")
@@ -132,11 +139,16 @@ export default function ReportsPage() {
     })
 
     lines.push("")
-    lines.push("Tanggal;Terjual;Pendapatan;Kode Voucher")
+    lines.push("Tanggal;Terjual;Pendapatan;Kode Voucher (jam)")
     Object.entries(byDate)
       .sort((a, b) => (a[0] < b[0] ? 1 : -1))
       .forEach(([date, info]: any) => {
-        const codes = (info.items || []).map((it: any) => it.username).join(" | ")
+        const codes = (info.items || [])
+          .map((it: any) => {
+            const t = formatTimeLabel(it.used_at)
+            return t ? it.username + " (" + t + ")" : it.username
+          })
+          .join(" | ")
         lines.push(date + ";" + info.count + ";" + (info.revenue || 0) + ";" + codes)
       })
 
@@ -422,6 +434,11 @@ export default function ReportsPage() {
                                               {it.username}
                                             </span>
                                             <span className="text-text-muted">{it.profile_name}</span>
+                                            {formatTimeLabel(it.used_at) && (
+                                              <span className="font-mono text-text-muted flex-shrink-0">
+                                                {formatTimeLabel(it.used_at)}
+                                              </span>
+                                            )}
                                           </div>
                                           <span className="font-mono text-signal-dark flex-shrink-0">
                                             Rp {(it.price || 0).toLocaleString("id-ID")}

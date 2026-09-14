@@ -113,7 +113,7 @@ export async function GET(req: NextRequest) {
       {
         count: number
         revenue: number
-        items: { username: string; profile_name: string; price: number }[]
+        items: { username: string; profile_name: string; price: number; used_at: string | null }[]
       }
     > = {}
 
@@ -122,7 +122,8 @@ export async function GET(req: NextRequest) {
     // supaya voucher yang di-generate massal lalu dipakai belakangan
     // tercatat pendapatannya di hari dia laku, bukan di hari generate.
     usedThisMonth.forEach((v) => {
-      const date = (usedDateOf(v) || "").split("T")[0]
+      const rawUsedAt = usedDateOf(v)
+      const date = (rawUsedAt || "").split("T")[0]
       if (!date) return
 
       if (!byDate[date]) byDate[date] = { count: 0, revenue: 0, items: [] }
@@ -132,6 +133,7 @@ export async function GET(req: NextRequest) {
         username: v.username,
         profile_name: v.profile_name || "-",
         price: Number(v.price) || 0,
+        used_at: rawUsedAt || null,
       })
     })
 
