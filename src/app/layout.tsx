@@ -1,4 +1,4 @@
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { Inter, JetBrains_Mono } from "next/font/google"
 import "./globals.css"
 
@@ -15,6 +15,19 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "MAMANAIY Hotspot Manager",
   description: "Sistem monitoring dan manajemen voucher hotspot",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Hotspot Manager",
+  },
+  icons: {
+    apple: "/icons/icon-192.png",
+  },
+}
+
+export const viewport: Viewport = {
+  themeColor: "#0E1526",
 }
 
 export default function RootLayout({
@@ -36,6 +49,11 @@ export default function RootLayout({
                   document.documentElement.classList.add('dark');
                 }
               } catch (e) {}
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function () {
+                  navigator.serviceWorker.register('/sw.js').catch(function () {});
+                });
+              }
             `,
           }}
         />

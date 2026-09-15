@@ -1,9 +1,10 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Save, Loader2, CheckCircle2, KeyRound, AlertCircle } from "lucide-react"
+import { Save, Loader2, CheckCircle2, KeyRound, AlertCircle, Smartphone } from "lucide-react"
 import { defaultSettings, AppSettings } from "@/lib/settings"
 import { useActiveRouter } from "@/lib/router-context"
+import InstallPwaButton from "@/components/InstallPwaButton"
 
 export default function SettingsPage() {
   const { activeRouterId, activeRouter } = useActiveRouter()
@@ -292,6 +293,19 @@ export default function SettingsPage() {
           {pwdLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
           Ganti Password
         </button>
+      </div>
+
+      {/* Install sebagai Aplikasi (PWA) */}
+      <div className="bg-surface rounded-xl border border-line p-5 space-y-3">
+        <h3 className="font-semibold text-text-primary flex items-center gap-2 text-sm">
+          <Smartphone className="w-4 h-4 text-signal-dark" />
+          Install Aplikasi
+        </h3>
+        <p className="text-xs text-text-secondary">
+          Pasang app ini di HP/laptop supaya bisa dibuka seperti aplikasi biasa —
+          ada ikon sendiri, tanpa address bar browser.
+        </p>
+        <InstallPwaButton />
       </div>
     </div>
   )
