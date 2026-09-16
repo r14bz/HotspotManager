@@ -1,10 +1,28 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Save, Loader2, CheckCircle2, KeyRound, AlertCircle, Smartphone } from "lucide-react"
-import { defaultSettings, AppSettings } from "@/lib/settings"
+import {
+  Save,
+  Loader2,
+  CheckCircle2,
+  KeyRound,
+  AlertCircle,
+  Smartphone,
+  User,
+  Tag,
+  Ticket,
+} from "lucide-react"
+import { defaultSettings, AppSettings, VoucherTemplate } from "@/lib/settings"
 import { useActiveRouter } from "@/lib/router-context"
 import InstallPwaButton from "@/components/InstallPwaButton"
+import AccordionCard from "@/components/AccordionCard"
+import VoucherCard from "@/components/VoucherCard"
+
+const TEMPLATE_OPTIONS: { id: VoucherTemplate; label: string }[] = [
+  { id: "klasik", label: "Klasik" },
+  { id: "tiket", label: "Tiket" },
+  { id: "struk", label: "Struk" },
+]
 
 export default function SettingsPage() {
   const { activeRouterId, activeRouter } = useActiveRouter()
@@ -13,6 +31,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [loadError, setLoadError] = useState(false)
+  const [openCard, setOpenCard] = useState<string | null>(null)
 
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
@@ -42,6 +61,10 @@ export default function SettingsPage() {
     }
     loadSettings()
   }, [activeRouterId])
+
+  const toggleCard = (id: string) => {
+    setOpenCard((prev) => (prev === id ? null : id))
+  }
 
   const handleSave = async () => {
     setSaving(true)
@@ -131,11 +154,35 @@ export default function SettingsPage() {
     "w-full border border-line rounded-lg px-3.5 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-signal/40 focus:border-signal"
   const labelClass = "block text-sm font-medium text-text-primary mb-1.5"
 
+  const SaveButton = () => (
+    <button
+      onClick={handleSave}
+      disabled={saving}
+      className="w-full sm:w-auto flex items-center justify-center gap-2 bg-signal hover:bg-signal-dark disabled:opacity-60 text-signal-on font-medium px-6 py-2.5 rounded-lg transition-colors"
+    >
+      {saving ? (
+        <Loader2 className="w-4 h-4 animate-spin" />
+      ) : saved ? (
+        <CheckCircle2 className="w-4 h-4" />
+      ) : (
+        <Save className="w-4 h-4" />
+      )}
+      {saved ? "Tersimpan" : "Simpan Pengaturan"}
+    </button>
+  )
+
+  const firstProfileKey = Object.keys(settings.prices)[0]
+  const sampleVoucher = {
+    username: "CONTOH1",
+    price: firstProfileKey ? settings.prices[firstProfileKey] : 3000,
+    timelimit: "1 Hari",
+  }
+
   return (
-    <div className="space-y-4 max-w-2xl">
+    <div className="space-y-3 max-w-2xl">
       {activeRouter && (
-        <p className="text-xs text-text-muted -mb-1">
-          Mengatur harga &amp; identitas untuk router:{" "}
+        <p className="text-xs text-text-muted">
+          Mengatur untuk router:{" "}
           <span className="font-medium text-text-secondary">{activeRouter.name}</span>
         </p>
       )}
@@ -151,9 +198,14 @@ export default function SettingsPage() {
         </div>
       ) : null}
 
-      <div className="bg-surface rounded-xl border border-line p-5 space-y-4">
-        <h3 className="font-semibold text-text-primary text-sm">Identitas</h3>
-
+      {/* Identitas */}
+      <AccordionCard
+        title="Identitas"
+        subtitle={settings.brandName}
+        icon={<User className="w-4 h-4 text-signal-dark flex-shrink-0" />}
+        isOpen={openCard === "identitas"}
+        onToggle={() => toggleCard("identitas")}
+      >
         <div>
           <label className={labelClass}>Nama Brand</label>
           <input
@@ -183,16 +235,18 @@ export default function SettingsPage() {
             className={`${inputClass} font-mono`}
           />
         </div>
-      </div>
 
-      <div className="bg-surface rounded-xl border border-line p-5 space-y-4">
-        <div>
-          <h3 className="font-semibold text-text-primary text-sm">Harga Profile</h3>
-          <p className="text-xs text-text-secondary mt-0.5">
-            Harga ini dipakai saat generate &amp; print voucher
-          </p>
-        </div>
+        <SaveButton />
+      </AccordionCard>
 
+      {/* Harga Profile */}
+      <AccordionCard
+        title="Harga Profile"
+        subtitle="Dipakai saat generate & print voucher"
+        icon={<Tag className="w-4 h-4 text-signal-dark flex-shrink-0" />}
+        isOpen={openCard === "harga"}
+        onToggle={() => toggleCard("harga")}
+      >
         <div className="space-y-2.5">
           {Object.keys(settings.prices).map((profile) => (
             <div
@@ -214,30 +268,123 @@ export default function SettingsPage() {
             </div>
           ))}
         </div>
-      </div>
 
-      <button
-        onClick={handleSave}
-        disabled={saving}
-        className="w-full sm:w-auto flex items-center justify-center gap-2 bg-signal hover:bg-signal-dark disabled:opacity-60 text-signal-on font-medium px-6 py-2.5 rounded-lg transition-colors"
+        <SaveButton />
+      </AccordionCard>
+
+      {/* Template Voucher */}
+      <AccordionCard
+        title="Template Voucher"
+        subtitle={TEMPLATE_OPTIONS.find((t) => t.id === settings.voucherTemplate)?.label}
+        icon={<Ticket className="w-4 h-4 text-signal-dark flex-shrink-0" />}
+        isOpen={openCard === "template"}
+        onToggle={() => toggleCard("template")}
       >
-        {saving ? (
-          <Loader2 className="w-4 h-4 animate-spin" />
-        ) : saved ? (
-          <CheckCircle2 className="w-4 h-4" />
-        ) : (
-          <Save className="w-4 h-4" />
-        )}
-        {saved ? "Tersimpan" : "Simpan Pengaturan"}
-      </button>
+        <div>
+          <label className={labelClass}>Pilih Desain</label>
+          <div className="grid grid-cols-3 gap-2">
+            {TEMPLATE_OPTIONS.map((opt) => (
+              <button
+                key={opt.id}
+                onClick={() => setSettings({ ...settings, voucherTemplate: opt.id })}
+                className={
+                  "rounded-lg border-2 p-2 flex flex-col items-center gap-1.5 transition-colors " +
+                  (settings.voucherTemplate === opt.id
+                    ? "border-signal bg-signal-soft"
+                    : "border-line hover:border-signal/40")
+                }
+              >
+                <div
+                  style={{
+                    width: "108px",
+                    height: "46px",
+                    overflow: "hidden",
+                    position: "relative",
+                  }}
+                >
+                  <div
+                    style={{
+                      transform: "scale(0.43)",
+                      transformOrigin: "top left",
+                      pointerEvents: "none",
+                    }}
+                  >
+                    <VoucherCard
+                      voucher={sampleVoucher}
+                      brandName={settings.brandName}
+                      waNumber={settings.waNumber}
+                      logoUrl={settings.logoUrl}
+                      logoSize={settings.logoSize}
+                      template={opt.id}
+                      dateLabel="Contoh"
+                    />
+                  </div>
+                </div>
+                <span
+                  className={
+                    "text-xs font-medium " +
+                    (settings.voucherTemplate === opt.id ? "text-signal-dark" : "text-text-secondary")
+                  }
+                >
+                  {opt.label}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className={labelClass}>URL Logo (opsional)</label>
+          <input
+            type="text"
+            value={settings.logoUrl || ""}
+            onChange={(e) => setSettings({ ...settings, logoUrl: e.target.value || null })}
+            placeholder="https://... atau kosongkan untuk pakai teks nama brand"
+            className={`${inputClass} font-mono text-xs`}
+          />
+          <p className="text-xs text-text-muted mt-1.5">
+            Kosongkan untuk menampilkan nama brand sebagai teks biasa. Upload dari HP menyusul.
+          </p>
+        </div>
+
+        <div>
+          <label className={labelClass}>Ukuran Logo — {settings.logoSize}%</label>
+          <input
+            type="range"
+            min={50}
+            max={200}
+            step={10}
+            value={settings.logoSize}
+            onChange={(e) => setSettings({ ...settings, logoSize: Number(e.target.value) })}
+            className="w-full accent-signal"
+          />
+        </div>
+
+        <div>
+          <label className={labelClass}>Preview</label>
+          <div className="bg-paper rounded-lg p-4 flex justify-center">
+            <VoucherCard
+              voucher={sampleVoucher}
+              brandName={settings.brandName}
+              waNumber={settings.waNumber}
+              logoUrl={settings.logoUrl}
+              logoSize={settings.logoSize}
+              template={settings.voucherTemplate}
+              dateLabel="Contoh tanggal"
+            />
+          </div>
+        </div>
+
+        <SaveButton />
+      </AccordionCard>
 
       {/* Ganti Password */}
-      <div className="bg-surface rounded-xl border border-line p-5 space-y-4">
-        <h3 className="font-semibold text-text-primary flex items-center gap-2 text-sm">
-          <KeyRound className="w-4 h-4 text-signal-dark" />
-          Ganti Password Admin
-        </h3>
-
+      <AccordionCard
+        title="Ganti Password Admin"
+        icon={<KeyRound className="w-4 h-4 text-signal-dark flex-shrink-0" />}
+        isOpen={openCard === "password"}
+        onToggle={() => toggleCard("password")}
+      >
         <div>
           <label className={labelClass}>Password Lama</label>
           <input
@@ -293,20 +440,21 @@ export default function SettingsPage() {
           {pwdLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
           Ganti Password
         </button>
-      </div>
+      </AccordionCard>
 
       {/* Install sebagai Aplikasi (PWA) */}
-      <div className="bg-surface rounded-xl border border-line p-5 space-y-3">
-        <h3 className="font-semibold text-text-primary flex items-center gap-2 text-sm">
-          <Smartphone className="w-4 h-4 text-signal-dark" />
-          Install Aplikasi
-        </h3>
+      <AccordionCard
+        title="Install Aplikasi"
+        icon={<Smartphone className="w-4 h-4 text-signal-dark flex-shrink-0" />}
+        isOpen={openCard === "install"}
+        onToggle={() => toggleCard("install")}
+      >
         <p className="text-xs text-text-secondary">
           Pasang app ini di HP/laptop supaya bisa dibuka seperti aplikasi biasa —
           ada ikon sendiri, tanpa address bar browser.
         </p>
         <InstallPwaButton />
-      </div>
+      </AccordionCard>
     </div>
   )
 }

@@ -3,11 +3,16 @@
 // (generate voucher, sync MikroTik, print) bisa baca harga & identitas
 // brand yang SAMA dengan yang diatur admin di halaman Pengaturan.
 
+export type VoucherTemplate = "klasik" | "tiket" | "struk"
+
 export type AppSettings = {
   brandName: string
   waNumber: string
   wifiName: string
   prices: Record<string, number>
+  voucherTemplate: VoucherTemplate
+  logoUrl: string | null
+  logoSize: number
 }
 
 // Dipakai sebagai fallback kalau baris settings belum ada di database,
@@ -26,6 +31,9 @@ export const defaultSettings: AppSettings = {
     "TRIAL-USER": 0,
     "default": 0,
   },
+  voucherTemplate: "klasik",
+  logoUrl: null,
+  logoSize: 100,
 }
 
 // Cari harga untuk sebuah profile. Exact match dulu, kalau tidak ada

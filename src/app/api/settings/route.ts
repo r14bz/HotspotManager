@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { defaultSettings, AppSettings } from "@/lib/settings"
+import { defaultSettings, AppSettings, VoucherTemplate } from "@/lib/settings"
+
+const VALID_TEMPLATES: VoucherTemplate[] = ["klasik", "tiket", "struk"]
 
 export async function GET(req: NextRequest) {
   const routerId = req.nextUrl.searchParams.get("router_id")
@@ -17,7 +19,7 @@ export async function GET(req: NextRequest) {
 
     const { data, error } = await supabase
       .from("app_settings")
-      .select("brand_name, wa_number, wifi_name, prices")
+      .select("brand_name, wa_number, wifi_name, prices, voucher_template, logo_url, logo_size")
       .eq("router_id", routerId)
       .maybeSingle()
 
@@ -34,6 +36,11 @@ export async function GET(req: NextRequest) {
         ...defaultSettings.prices,
         ...(data.prices || {}),
       },
+      voucherTemplate: VALID_TEMPLATES.includes(data.voucher_template)
+        ? data.voucher_template
+        : defaultSettings.voucherTemplate,
+      logoUrl: data.logo_url || null,
+      logoSize: data.logo_size || defaultSettings.logoSize,
     }
 
     return NextResponse.json({ success: true, data: settings })
@@ -59,6 +66,11 @@ export async function POST(req: NextRequest) {
     const wifiName = String(body.wifiName || defaultSettings.wifiName)
     const prices =
       body.prices && typeof body.prices === "object" ? body.prices : defaultSettings.prices
+    const voucherTemplate = VALID_TEMPLATES.includes(body.voucherTemplate)
+      ? body.voucherTemplate
+      : defaultSettings.voucherTemplate
+    const logoUrl = body.logoUrl ? String(body.logoUrl).trim() : null
+    const logoSize = Number(body.logoSize) || defaultSettings.logoSize
 
     const supabase = await createClient()
 
@@ -69,6 +81,9 @@ export async function POST(req: NextRequest) {
         wa_number: waNumber,
         wifi_name: wifiName,
         prices,
+        voucher_template: voucherTemplate,
+        logo_url: logoUrl,
+        logo_size: logoSize,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "router_id" }

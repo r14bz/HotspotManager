@@ -1,0 +1,1091 @@
+diff --git a/src/app/api/settings/route.ts b/src/app/api/settings/route.ts
+index 5ebf788..e68c0b6 100644
+--- a/src/app/api/settings/route.ts
++++ b/src/app/api/settings/route.ts
+@@ -1,6 +1,8 @@
+ import { NextRequest, NextResponse } from "next/server"
+ import { createClient } from "@/lib/supabase/server"
+-import { defaultSettings, AppSettings } from "@/lib/settings"
++import { defaultSettings, AppSettings, VoucherTemplate } from "@/lib/settings"
++
++const VALID_TEMPLATES: VoucherTemplate[] = ["klasik", "tiket", "struk"]
+ 
+ export async function GET(req: NextRequest) {
+   const routerId = req.nextUrl.searchParams.get("router_id")
+@@ -17,7 +19,7 @@ export async function GET(req: NextRequest) {
+ 
+     const { data, error } = await supabase
+       .from("app_settings")
+-      .select("brand_name, wa_number, wifi_name, prices")
++      .select("brand_name, wa_number, wifi_name, prices, voucher_template, logo_url, logo_size")
+       .eq("router_id", routerId)
+       .maybeSingle()
+ 
+@@ -34,6 +36,11 @@ export async function GET(req: NextRequest) {
+         ...defaultSettings.prices,
+         ...(data.prices || {}),
+       },
++      voucherTemplate: VALID_TEMPLATES.includes(data.voucher_template)
++        ? data.voucher_template
++        : defaultSettings.voucherTemplate,
++      logoUrl: data.logo_url || null,
++      logoSize: data.logo_size || defaultSettings.logoSize,
+     }
+ 
+     return NextResponse.json({ success: true, data: settings })
+@@ -59,6 +66,11 @@ export async function POST(req: NextRequest) {
+     const wifiName = String(body.wifiName || defaultSettings.wifiName)
+     const prices =
+       body.prices && typeof body.prices === "object" ? body.prices : defaultSettings.prices
++    const voucherTemplate = VALID_TEMPLATES.includes(body.voucherTemplate)
++      ? body.voucherTemplate
++      : defaultSettings.voucherTemplate
++    const logoUrl = body.logoUrl ? String(body.logoUrl).trim() : null
++    const logoSize = Number(body.logoSize) || defaultSettings.logoSize
+ 
+     const supabase = await createClient()
+ 
+@@ -69,6 +81,9 @@ export async function POST(req: NextRequest) {
+         wa_number: waNumber,
+         wifi_name: wifiName,
+         prices,
++        voucher_template: voucherTemplate,
++        logo_url: logoUrl,
++        logo_size: logoSize,
+         updated_at: new Date().toISOString(),
+       },
+       { onConflict: "router_id" }
+diff --git a/src/app/dashboard/settings/page.tsx b/src/app/dashboard/settings/page.tsx
+index 66ccdd8..e9df9da 100644
+--- a/src/app/dashboard/settings/page.tsx
++++ b/src/app/dashboard/settings/page.tsx
+@@ -1,10 +1,28 @@
+ "use client"
+ 
+ import { useEffect, useState } from "react"
+-import { Save, Loader2, CheckCircle2, KeyRound, AlertCircle, Smartphone } from "lucide-react"
+-import { defaultSettings, AppSettings } from "@/lib/settings"
++import {
++  Save,
++  Loader2,
++  CheckCircle2,
++  KeyRound,
++  AlertCircle,
++  Smartphone,
++  User,
++  Tag,
++  Ticket,
++} from "lucide-react"
++import { defaultSettings, AppSettings, VoucherTemplate } from "@/lib/settings"
+ import { useActiveRouter } from "@/lib/router-context"
+ import InstallPwaButton from "@/components/InstallPwaButton"
++import AccordionCard from "@/components/AccordionCard"
++import VoucherCard from "@/components/VoucherCard"
++
++const TEMPLATE_OPTIONS: { id: VoucherTemplate; label: string }[] = [
++  { id: "klasik", label: "Klasik" },
++  { id: "tiket", label: "Tiket" },
++  { id: "struk", label: "Struk" },
++]
+ 
+ export default function SettingsPage() {
+   const { activeRouterId, activeRouter } = useActiveRouter()
+@@ -13,6 +31,7 @@ export default function SettingsPage() {
+   const [saving, setSaving] = useState(false)
+   const [saved, setSaved] = useState(false)
+   const [loadError, setLoadError] = useState(false)
++  const [openCard, setOpenCard] = useState<string | null>(null)
+ 
+   const [currentPassword, setCurrentPassword] = useState("")
+   const [newPassword, setNewPassword] = useState("")
+@@ -43,6 +62,10 @@ export default function SettingsPage() {
+     loadSettings()
+   }, [activeRouterId])
+ 
++  const toggleCard = (id: string) => {
++    setOpenCard((prev) => (prev === id ? null : id))
++  }
++
+   const handleSave = async () => {
+     setSaving(true)
+     setSaved(false)
+@@ -131,11 +154,35 @@ export default function SettingsPage() {
+     "w-full border border-line rounded-lg px-3.5 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-signal/40 focus:border-signal"
+   const labelClass = "block text-sm font-medium text-text-primary mb-1.5"
+ 
++  const SaveButton = () => (
++    <button
++      onClick={handleSave}
++      disabled={saving}
++      className="w-full sm:w-auto flex items-center justify-center gap-2 bg-signal hover:bg-signal-dark disabled:opacity-60 text-signal-on font-medium px-6 py-2.5 rounded-lg transition-colors"
++    >
++      {saving ? (
++        <Loader2 className="w-4 h-4 animate-spin" />
++      ) : saved ? (
++        <CheckCircle2 className="w-4 h-4" />
++      ) : (
++        <Save className="w-4 h-4" />
++      )}
++      {saved ? "Tersimpan" : "Simpan Pengaturan"}
++    </button>
++  )
++
++  const firstProfileKey = Object.keys(settings.prices)[0]
++  const sampleVoucher = {
++    username: "CONTOH1",
++    price: firstProfileKey ? settings.prices[firstProfileKey] : 3000,
++    timelimit: "1 Hari",
++  }
++
+   return (
+-    <div className="space-y-4 max-w-2xl">
++    <div className="space-y-3 max-w-2xl">
+       {activeRouter && (
+-        <p className="text-xs text-text-muted -mb-1">
+-          Mengatur harga &amp; identitas untuk router:{" "}
++        <p className="text-xs text-text-muted">
++          Mengatur untuk router:{" "}
+           <span className="font-medium text-text-secondary">{activeRouter.name}</span>
+         </p>
+       )}
+@@ -151,9 +198,14 @@ export default function SettingsPage() {
+         </div>
+       ) : null}
+ 
+-      <div className="bg-surface rounded-xl border border-line p-5 space-y-4">
+-        <h3 className="font-semibold text-text-primary text-sm">Identitas</h3>
+-
++      {/* Identitas */}
++      <AccordionCard
++        title="Identitas"
++        subtitle={settings.brandName}
++        icon={<User className="w-4 h-4 text-signal-dark flex-shrink-0" />}
++        isOpen={openCard === "identitas"}
++        onToggle={() => toggleCard("identitas")}
++      >
+         <div>
+           <label className={labelClass}>Nama Brand</label>
+           <input
+@@ -183,16 +235,18 @@ export default function SettingsPage() {
+             className={`${inputClass} font-mono`}
+           />
+         </div>
+-      </div>
+ 
+-      <div className="bg-surface rounded-xl border border-line p-5 space-y-4">
+-        <div>
+-          <h3 className="font-semibold text-text-primary text-sm">Harga Profile</h3>
+-          <p className="text-xs text-text-secondary mt-0.5">
+-            Harga ini dipakai saat generate &amp; print voucher
+-          </p>
+-        </div>
++        <SaveButton />
++      </AccordionCard>
+ 
++      {/* Harga Profile */}
++      <AccordionCard
++        title="Harga Profile"
++        subtitle="Dipakai saat generate & print voucher"
++        icon={<Tag className="w-4 h-4 text-signal-dark flex-shrink-0" />}
++        isOpen={openCard === "harga"}
++        onToggle={() => toggleCard("harga")}
++      >
+         <div className="space-y-2.5">
+           {Object.keys(settings.prices).map((profile) => (
+             <div
+@@ -214,30 +268,123 @@ export default function SettingsPage() {
+             </div>
+           ))}
+         </div>
+-      </div>
+ 
+-      <button
+-        onClick={handleSave}
+-        disabled={saving}
+-        className="w-full sm:w-auto flex items-center justify-center gap-2 bg-signal hover:bg-signal-dark disabled:opacity-60 text-signal-on font-medium px-6 py-2.5 rounded-lg transition-colors"
++        <SaveButton />
++      </AccordionCard>
++
++      {/* Template Voucher */}
++      <AccordionCard
++        title="Template Voucher"
++        subtitle={TEMPLATE_OPTIONS.find((t) => t.id === settings.voucherTemplate)?.label}
++        icon={<Ticket className="w-4 h-4 text-signal-dark flex-shrink-0" />}
++        isOpen={openCard === "template"}
++        onToggle={() => toggleCard("template")}
+       >
+-        {saving ? (
+-          <Loader2 className="w-4 h-4 animate-spin" />
+-        ) : saved ? (
+-          <CheckCircle2 className="w-4 h-4" />
+-        ) : (
+-          <Save className="w-4 h-4" />
+-        )}
+-        {saved ? "Tersimpan" : "Simpan Pengaturan"}
+-      </button>
++        <div>
++          <label className={labelClass}>Pilih Desain</label>
++          <div className="grid grid-cols-3 gap-2">
++            {TEMPLATE_OPTIONS.map((opt) => (
++              <button
++                key={opt.id}
++                onClick={() => setSettings({ ...settings, voucherTemplate: opt.id })}
++                className={
++                  "rounded-lg border-2 p-2 flex flex-col items-center gap-1.5 transition-colors " +
++                  (settings.voucherTemplate === opt.id
++                    ? "border-signal bg-signal-soft"
++                    : "border-line hover:border-signal/40")
++                }
++              >
++                <div
++                  style={{
++                    width: "108px",
++                    height: "46px",
++                    overflow: "hidden",
++                    position: "relative",
++                  }}
++                >
++                  <div
++                    style={{
++                      transform: "scale(0.43)",
++                      transformOrigin: "top left",
++                      pointerEvents: "none",
++                    }}
++                  >
++                    <VoucherCard
++                      voucher={sampleVoucher}
++                      brandName={settings.brandName}
++                      waNumber={settings.waNumber}
++                      logoUrl={settings.logoUrl}
++                      logoSize={settings.logoSize}
++                      template={opt.id}
++                      dateLabel="Contoh"
++                    />
++                  </div>
++                </div>
++                <span
++                  className={
++                    "text-xs font-medium " +
++                    (settings.voucherTemplate === opt.id ? "text-signal-dark" : "text-text-secondary")
++                  }
++                >
++                  {opt.label}
++                </span>
++              </button>
++            ))}
++          </div>
++        </div>
+ 
+-      {/* Ganti Password */}
+-      <div className="bg-surface rounded-xl border border-line p-5 space-y-4">
+-        <h3 className="font-semibold text-text-primary flex items-center gap-2 text-sm">
+-          <KeyRound className="w-4 h-4 text-signal-dark" />
+-          Ganti Password Admin
+-        </h3>
++        <div>
++          <label className={labelClass}>URL Logo (opsional)</label>
++          <input
++            type="text"
++            value={settings.logoUrl || ""}
++            onChange={(e) => setSettings({ ...settings, logoUrl: e.target.value || null })}
++            placeholder="https://... atau kosongkan untuk pakai teks nama brand"
++            className={`${inputClass} font-mono text-xs`}
++          />
++          <p className="text-xs text-text-muted mt-1.5">
++            Kosongkan untuk menampilkan nama brand sebagai teks biasa. Upload dari HP menyusul.
++          </p>
++        </div>
+ 
++        <div>
++          <label className={labelClass}>Ukuran Logo — {settings.logoSize}%</label>
++          <input
++            type="range"
++            min={50}
++            max={200}
++            step={10}
++            value={settings.logoSize}
++            onChange={(e) => setSettings({ ...settings, logoSize: Number(e.target.value) })}
++            className="w-full accent-signal"
++          />
++        </div>
++
++        <div>
++          <label className={labelClass}>Preview</label>
++          <div className="bg-paper rounded-lg p-4 flex justify-center">
++            <VoucherCard
++              voucher={sampleVoucher}
++              brandName={settings.brandName}
++              waNumber={settings.waNumber}
++              logoUrl={settings.logoUrl}
++              logoSize={settings.logoSize}
++              template={settings.voucherTemplate}
++              dateLabel="Contoh tanggal"
++            />
++          </div>
++        </div>
++
++        <SaveButton />
++      </AccordionCard>
++
++      {/* Ganti Password */}
++      <AccordionCard
++        title="Ganti Password Admin"
++        icon={<KeyRound className="w-4 h-4 text-signal-dark flex-shrink-0" />}
++        isOpen={openCard === "password"}
++        onToggle={() => toggleCard("password")}
++      >
+         <div>
+           <label className={labelClass}>Password Lama</label>
+           <input
+@@ -293,20 +440,21 @@ export default function SettingsPage() {
+           {pwdLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+           Ganti Password
+         </button>
+-      </div>
++      </AccordionCard>
+ 
+       {/* Install sebagai Aplikasi (PWA) */}
+-      <div className="bg-surface rounded-xl border border-line p-5 space-y-3">
+-        <h3 className="font-semibold text-text-primary flex items-center gap-2 text-sm">
+-          <Smartphone className="w-4 h-4 text-signal-dark" />
+-          Install Aplikasi
+-        </h3>
++      <AccordionCard
++        title="Install Aplikasi"
++        icon={<Smartphone className="w-4 h-4 text-signal-dark flex-shrink-0" />}
++        isOpen={openCard === "install"}
++        onToggle={() => toggleCard("install")}
++      >
+         <p className="text-xs text-text-secondary">
+           Pasang app ini di HP/laptop supaya bisa dibuka seperti aplikasi biasa —
+           ada ikon sendiri, tanpa address bar browser.
+         </p>
+         <InstallPwaButton />
+-      </div>
++      </AccordionCard>
+     </div>
+   )
+ }
+diff --git a/src/app/print/page.tsx b/src/app/print/page.tsx
+index f8b327a..edde638 100644
+--- a/src/app/print/page.tsx
++++ b/src/app/print/page.tsx
+@@ -1,38 +1,28 @@
+ "use client"
+ 
+ import { useEffect, useState } from "react"
+-import { QRCodeSVG } from "qrcode.react"
+-import { defaultSettings } from "@/lib/settings"
+-
+-type Voucher = {
+-  username: string
+-  price: number
+-  validity?: string
+-  timelimit?: string
+-  datalimit?: string
+-}
++import { defaultSettings, AppSettings } from "@/lib/settings"
++import VoucherCard, { VoucherCardData } from "@/components/VoucherCard"
+ 
+ export default function PrintPage() {
+-  const [vouchers, setVouchers] = useState<Voucher[]>([])
+-  const [brandName, setBrandName] = useState(defaultSettings.brandName)
+-  const [waNumber, setWaNumber] = useState(defaultSettings.waNumber)
++  const [vouchers, setVouchers] = useState<VoucherCardData[]>([])
++  const [settings, setSettings] = useState<AppSettings>(defaultSettings)
+ 
+   useEffect(() => {
+-    const loadBrand = async () => {
++    const loadSettings = async () => {
+       const routerId = localStorage.getItem("active_router_id")
+       if (!routerId) return
+       try {
+         const res = await fetch(`/api/settings?router_id=${routerId}`)
+         const json = await res.json()
+         if (json.success && json.data) {
+-          setBrandName(json.data.brandName || defaultSettings.brandName)
+-          setWaNumber(json.data.waNumber || defaultSettings.waNumber)
++          setSettings(json.data)
+         }
+       } catch {
+         // pakai default
+       }
+     }
+-    loadBrand()
++    loadSettings()
+ 
+     const saved = localStorage.getItem("print_vouchers")
+     if (saved) {
+@@ -44,36 +34,6 @@ export default function PrintPage() {
+     }
+   }, [])
+ 
+-  const getColor = (price: number) => {
+-    if (price === 0) return "#6B7280"
+-    if (price === 2000) return "#A855F7"
+-    if (price === 3000) return "#2563EB"
+-    if (price === 5000) return "#F97316"
+-    if (price === 10000) return "#F59E0B"
+-    if (price === 30000) return "#22C55E"
+-    if (price === 50000) return "#EF4444"
+-    return "#8B5CF6"
+-  }
+-
+-  const formatDurasi = (v: Voucher) => {
+-    const val = v.timelimit || v.validity || ""
+-    if (!val) return "-"
+-    if (val.indexOf("Hari") >= 0 || val.indexOf("Jam") >= 0 || val.indexOf("Menit") >= 0) {
+-      return val
+-    }
+-    if (val.endsWith("d")) return val.slice(0, -1) + " Hari"
+-    if (val.endsWith("h")) return val.slice(0, -1) + " Jam"
+-    if (val.endsWith("w")) return String(Number(val.slice(0, -1)) * 7) + " Hari"
+-    return val
+-  }
+-
+-  const currentDate = new Date().toLocaleDateString("id-ID", {
+-    weekday: "long",
+-    day: "numeric",
+-    month: "long",
+-    year: "numeric",
+-  })
+-
+   return (
+     <div>
+       <div className="no-print p-4 bg-paper flex items-center gap-3 sticky top-0 border-b border-line">
+@@ -97,146 +57,19 @@ export default function PrintPage() {
+       <div className="print-area p-2">
+         <div className="flex flex-wrap gap-2">
+           {vouchers.length === 0 ? (
+-            <p className="text-gray-400 text-sm">Tidak ada data voucher untuk di-print.</p>
++            <p className="text-text-muted text-sm">Tidak ada data voucher untuk di-print.</p>
+           ) : (
+-            vouchers.map((v, idx) => {
+-              const color = getColor(v.price || 0)
+-
+-              return (
+-                <div
+-                  key={idx}
+-                  style={{
+-                    display: "inline-flex",
+-                    width: "250px",
+-                    borderRadius: "8px",
+-                    overflow: "hidden",
+-                    boxShadow: "0 1px 4px rgba(0,0,0,0.12)",
+-                    fontFamily: "Tahoma, Arial, sans-serif",
+-                    background: "#fff",
+-                    border: "1px solid #ddd",
+-                    pageBreakInside: "avoid",
+-                  }}
+-                >
+-                  <div
+-                    style={{
+-                      width: "34px",
+-                      backgroundColor: color,
+-                      color: "#fff",
+-                      display: "flex",
+-                      alignItems: "center",
+-                      justifyContent: "center",
+-                      writingMode: "vertical-rl",
+-                      transform: "rotate(180deg)",
+-                      fontSize: "11px",
+-                      fontWeight: "bold",
+-                      letterSpacing: "0.5px",
+-                      WebkitPrintColorAdjust: "exact",
+-                      printColorAdjust: "exact",
+-                    }}
+-                  >
+-                    {"Rp" + (v.price || 0).toLocaleString("id-ID")}
+-                  </div>
+-
+-                  <div style={{ flex: 1, padding: "8px 10px" }}>
+-                    {brandName.trim().toLowerCase() === "mamanaiy.net" ? (
+-                      <img
+-                        src="/logo/mamanaiy-wordmark.png"
+-                        alt={brandName}
+-                        style={{ height: "18px", marginBottom: "5px", display: "block" }}
+-                      />
+-                    ) : (
+-                      <div
+-                        style={{
+-                          fontWeight: "bold",
+-                          fontSize: "12px",
+-                          color: "#15803D",
+-                          marginBottom: "3px",
+-                        }}
+-                      >
+-                        {brandName}
+-                      </div>
+-                    )}
+-
+-                    <div
+-                      style={{
+-                        fontSize: "7px",
+-                        color: "#888",
+-                        letterSpacing: "0.5px",
+-                      }}
+-                    >
+-                      KODE VOUCHER
+-                    </div>
+-                    <div
+-                      style={{
+-                        fontSize: "15px",
+-                        fontWeight: "bold",
+-                        color: "#111",
+-                        letterSpacing: "0.5px",
+-                        marginBottom: "4px",
+-                      }}
+-                    >
+-                      {v.username}
+-                    </div>
+-
+-                    <div
+-                      style={{
+-                        display: "flex",
+-                        justifyContent: "space-between",
+-                        alignItems: "flex-end",
+-                      }}
+-                    >
+-                      <div>
+-                        <div
+-                          style={{
+-                            fontSize: "10px",
+-                            color: "#333",
+-                            fontWeight: "bold",
+-                            marginBottom: "3px",
+-                          }}
+-                        >
+-                          {formatDurasi(v)}
+-                        </div>
+-                        <div
+-                          style={{
+-                            fontSize: "8px",
+-                            color: "#555",
+-                            fontWeight: "bold",
+-                          }}
+-                        >
+-                          {"WA : " + waNumber}
+-                        </div>
+-                        <div
+-                          style={{
+-                            fontSize: "7px",
+-                            color: "#999",
+-                            marginTop: "1px",
+-                          }}
+-                        >
+-                          {currentDate}
+-                        </div>
+-                      </div>
+-
+-                      <div
+-                        style={{
+-                          width: "42px",
+-                          height: "42px",
+-                          display: "flex",
+-                          alignItems: "center",
+-                          justifyContent: "center",
+-                        }}
+-                      >
+-                        <QRCodeSVG
+-                          value={v.username}
+-                          size={40}
+-                          level="M"
+-                          includeMargin={false}
+-                        />
+-                      </div>
+-                    </div>
+-                  </div>
+-                </div>
+-              )
+-            })
++            vouchers.map((v, idx) => (
++              <VoucherCard
++                key={idx}
++                voucher={v}
++                brandName={settings.brandName}
++                waNumber={settings.waNumber}
++                logoUrl={settings.logoUrl}
++                logoSize={settings.logoSize}
++                template={settings.voucherTemplate}
++              />
++            ))
+           )}
+         </div>
+       </div>
+diff --git a/src/components/AccordionCard.tsx b/src/components/AccordionCard.tsx
+new file mode 100644
+index 0000000..70ee528
+--- /dev/null
++++ b/src/components/AccordionCard.tsx
+@@ -0,0 +1,48 @@
++"use client"
++
++import { ChevronDown } from "lucide-react"
++import { ReactNode } from "react"
++
++export default function AccordionCard({
++  title,
++  subtitle,
++  icon,
++  isOpen,
++  onToggle,
++  children,
++}: {
++  title: string
++  subtitle?: string
++  icon?: ReactNode
++  isOpen: boolean
++  onToggle: () => void
++  children: ReactNode
++}) {
++  return (
++    <div className="bg-surface rounded-xl border border-line overflow-hidden">
++      <button
++        onClick={onToggle}
++        className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left"
++      >
++        <div className="flex items-center gap-2 min-w-0">
++          {icon}
++          <div className="min-w-0">
++            <h3 className="font-semibold text-text-primary text-sm">{title}</h3>
++            {subtitle ? (
++              <p className="text-xs text-text-secondary mt-0.5 truncate">{subtitle}</p>
++            ) : null}
++          </div>
++        </div>
++        <ChevronDown
++          className={
++            "w-4 h-4 text-text-muted flex-shrink-0 transition-transform " +
++            (isOpen ? "rotate-180" : "")
++          }
++        />
++      </button>
++      {isOpen ? (
++        <div className="px-5 pb-5 space-y-4 border-t border-line pt-4">{children}</div>
++      ) : null}
++    </div>
++  )
++}
+diff --git a/src/components/VoucherCard.tsx b/src/components/VoucherCard.tsx
+new file mode 100644
+index 0000000..ff35cdf
+--- /dev/null
++++ b/src/components/VoucherCard.tsx
+@@ -0,0 +1,358 @@
++"use client"
++
++import { QRCodeSVG } from "qrcode.react"
++
++export type VoucherTemplate = "klasik" | "tiket" | "struk"
++
++export type VoucherCardData = {
++  username: string
++  price: number
++  validity?: string
++  timelimit?: string
++  datalimit?: string
++}
++
++export type VoucherCardProps = {
++  voucher: VoucherCardData
++  brandName: string
++  waNumber: string
++  logoUrl?: string | null
++  logoSize?: number
++  template?: VoucherTemplate
++  dateLabel?: string
++}
++
++export function getVoucherColor(price: number) {
++  if (price === 0) return "#6B7280"
++  if (price === 2000) return "#A855F7"
++  if (price === 3000) return "#2563EB"
++  if (price === 5000) return "#F97316"
++  if (price === 10000) return "#F59E0B"
++  if (price === 30000) return "#22C55E"
++  if (price === 50000) return "#EF4444"
++  return "#8B5CF6"
++}
++
++export function formatDurasi(v: VoucherCardData) {
++  const val = v.timelimit || v.validity || ""
++  if (!val) return "-"
++  if (val.indexOf("Hari") >= 0 || val.indexOf("Jam") >= 0 || val.indexOf("Menit") >= 0) {
++    return val
++  }
++  if (val.endsWith("d")) return val.slice(0, -1) + " Hari"
++  if (val.endsWith("h")) return val.slice(0, -1) + " Jam"
++  if (val.endsWith("w")) return String(Number(val.slice(0, -1)) * 7) + " Hari"
++  return val
++}
++
++function lightenHex(hex: string, amount = 0.85) {
++  const num = parseInt(hex.replace("#", ""), 16)
++  const r = (num >> 16) & 255
++  const g = (num >> 8) & 255
++  const b = num & 255
++  const mix = (c: number) => Math.round(c + (255 - c) * amount)
++  return `rgb(${mix(r)}, ${mix(g)}, ${mix(b)})`
++}
++
++const PRINT_COLOR_ADJUST = {
++  WebkitPrintColorAdjust: "exact" as const,
++  printColorAdjust: "exact" as const,
++}
++
++export default function VoucherCard({
++  voucher,
++  brandName,
++  waNumber,
++  logoUrl,
++  logoSize = 100,
++  template = "klasik",
++  dateLabel,
++}: VoucherCardProps) {
++  const color = getVoucherColor(voucher.price || 0)
++  const scale = (logoSize || 100) / 100
++  const durasi = formatDurasi(voucher)
++  const date =
++    dateLabel ||
++    new Date().toLocaleDateString("id-ID", {
++      weekday: "long",
++      day: "numeric",
++      month: "long",
++      year: "numeric",
++    })
++  const priceLabel = "Rp" + (voucher.price || 0).toLocaleString("id-ID")
++
++  const Brand = ({
++    baseHeight,
++    textSize,
++    textColor,
++  }: {
++    baseHeight: number
++    textSize: string
++    textColor: string
++  }) =>
++    logoUrl ? (
++      <img
++        src={logoUrl}
++        alt={brandName}
++        style={{ height: `${baseHeight * scale}px`, display: "block" }}
++      />
++    ) : (
++      <div style={{ fontWeight: "bold", fontSize: textSize, color: textColor }}>{brandName}</div>
++    )
++
++  // ============ TEMPLATE: TIKET ============
++  if (template === "tiket") {
++    return (
++      <div
++        style={{
++          display: "inline-flex",
++          width: "250px",
++          borderRadius: "8px",
++          overflow: "hidden",
++          boxShadow: "0 1px 4px rgba(0,0,0,0.12)",
++          fontFamily: "Tahoma, Arial, sans-serif",
++          background: lightenHex(color, 0.88),
++          border: "1px solid #ddd",
++          pageBreakInside: "avoid",
++          ...PRINT_COLOR_ADJUST,
++        }}
++      >
++        <div style={{ flex: 1, padding: "10px 12px", textAlign: "center" }}>
++          <div style={{ marginBottom: "6px", display: "flex", justifyContent: "center" }}>
++            <Brand baseHeight={14} textSize="11px" textColor="#15803D" />
++          </div>
++          <div
++            style={{
++              fontSize: "16px",
++              fontWeight: "bold",
++              color: "#111",
++              letterSpacing: "1px",
++            }}
++          >
++            {voucher.username}
++          </div>
++          <div style={{ fontSize: "8px", color: "#444", marginTop: "4px" }}>
++            {durasi} &middot; WA {waNumber}
++          </div>
++          <div style={{ fontSize: "7px", color: "#777", marginTop: "1px" }}>{date}</div>
++        </div>
++
++        <div
++          style={{
++            width: "1px",
++            backgroundImage: `repeating-linear-gradient(to bottom, ${color} 0 5px, transparent 5px 10px)`,
++          }}
++        />
++
++        <div
++          style={{
++            width: "62px",
++            backgroundColor: color,
++            display: "flex",
++            flexDirection: "column",
++            alignItems: "center",
++            justifyContent: "center",
++            gap: "5px",
++            padding: "8px 0",
++            ...PRINT_COLOR_ADJUST,
++          }}
++        >
++          <div
++            style={{
++              width: "34px",
++              height: "34px",
++              background: "#fff",
++              borderRadius: "3px",
++              display: "flex",
++              alignItems: "center",
++              justifyContent: "center",
++            }}
++          >
++            <QRCodeSVG value={voucher.username} size={30} level="M" includeMargin={false} />
++          </div>
++          <span style={{ fontSize: "10px", fontWeight: "bold", color: "#fff" }}>
++            {priceLabel}
++          </span>
++        </div>
++      </div>
++    )
++  }
++
++  // ============ TEMPLATE: STRUK ============
++  if (template === "struk") {
++    return (
++      <div
++        style={{
++          display: "inline-flex",
++          flexDirection: "column",
++          width: "250px",
++          borderRadius: "8px",
++          overflow: "hidden",
++          boxShadow: "0 1px 4px rgba(0,0,0,0.12)",
++          fontFamily: "Tahoma, Arial, sans-serif",
++          background: "#fff",
++          border: "1px solid #ddd",
++          pageBreakInside: "avoid",
++        }}
++      >
++        <div
++          style={{
++            background: "#0E1526",
++            padding: "6px 12px",
++            display: "flex",
++            alignItems: "center",
++            ...PRINT_COLOR_ADJUST,
++          }}
++        >
++          {logoUrl ? (
++            <img
++              src={logoUrl}
++              alt={brandName}
++              style={{ height: `${13 * scale}px`, display: "block" }}
++            />
++          ) : (
++            <span style={{ fontSize: "10px", fontWeight: "bold", color: "#2BEE34" }}>
++              {brandName}
++            </span>
++          )}
++        </div>
++
++        <div
++          style={{
++            padding: "9px 12px",
++            display: "flex",
++            justifyContent: "space-between",
++            alignItems: "center",
++            gap: "8px",
++          }}
++        >
++          <div style={{ minWidth: 0 }}>
++            <div
++              style={{
++                fontSize: "14px",
++                fontWeight: "bold",
++                color: "#111",
++                letterSpacing: "0.5px",
++              }}
++            >
++              {voucher.username}
++            </div>
++            <div style={{ fontSize: "8px", color: "#666", marginTop: "2px" }}>
++              {durasi} &middot; WA {waNumber}
++            </div>
++            <div style={{ fontSize: "7px", color: "#999", marginTop: "1px" }}>{date}</div>
++            <span
++              style={{
++                display: "inline-block",
++                marginTop: "5px",
++                fontSize: "9px",
++                fontWeight: "bold",
++                color: "#15803D",
++                background: "#E6FBEA",
++                padding: "2px 7px",
++                borderRadius: "4px",
++                ...PRINT_COLOR_ADJUST,
++              }}
++            >
++              {priceLabel}
++            </span>
++          </div>
++
++          <div
++            style={{
++              width: "36px",
++              height: "36px",
++              flexShrink: 0,
++              display: "flex",
++              alignItems: "center",
++              justifyContent: "center",
++            }}
++          >
++            <QRCodeSVG value={voucher.username} size={34} level="M" includeMargin={false} />
++          </div>
++        </div>
++      </div>
++    )
++  }
++
++  // ============ TEMPLATE: KLASIK (default) ============
++  return (
++    <div
++      style={{
++        display: "inline-flex",
++        width: "250px",
++        borderRadius: "8px",
++        overflow: "hidden",
++        boxShadow: "0 1px 4px rgba(0,0,0,0.12)",
++        fontFamily: "Tahoma, Arial, sans-serif",
++        background: "#fff",
++        border: "1px solid #ddd",
++        pageBreakInside: "avoid",
++      }}
++    >
++      <div
++        style={{
++          width: "34px",
++          backgroundColor: color,
++          color: "#fff",
++          display: "flex",
++          alignItems: "center",
++          justifyContent: "center",
++          writingMode: "vertical-rl",
++          transform: "rotate(180deg)",
++          fontSize: "11px",
++          fontWeight: "bold",
++          letterSpacing: "0.5px",
++          ...PRINT_COLOR_ADJUST,
++        }}
++      >
++        {priceLabel}
++      </div>
++
++      <div style={{ flex: 1, padding: "8px 10px" }}>
++        <div style={{ marginBottom: "5px" }}>
++          <Brand baseHeight={18} textSize="12px" textColor="#15803D" />
++        </div>
++
++        <div style={{ fontSize: "7px", color: "#888", letterSpacing: "0.5px" }}>
++          KODE VOUCHER
++        </div>
++        <div
++          style={{
++            fontSize: "15px",
++            fontWeight: "bold",
++            color: "#111",
++            letterSpacing: "0.5px",
++            marginBottom: "4px",
++          }}
++        >
++          {voucher.username}
++        </div>
++
++        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
++          <div>
++            <div style={{ fontSize: "10px", color: "#333", fontWeight: "bold", marginBottom: "3px" }}>
++              {durasi}
++            </div>
++            <div style={{ fontSize: "8px", color: "#555", fontWeight: "bold" }}>
++              {"WA : " + waNumber}
++            </div>
++            <div style={{ fontSize: "7px", color: "#999", marginTop: "1px" }}>{date}</div>
++          </div>
++
++          <div
++            style={{
++              width: "42px",
++              height: "42px",
++              display: "flex",
++              alignItems: "center",
++              justifyContent: "center",
++            }}
++          >
++            <QRCodeSVG value={voucher.username} size={40} level="M" includeMargin={false} />
++          </div>
++        </div>
++      </div>
++    </div>
++  )
++}
+diff --git a/src/lib/settings.ts b/src/lib/settings.ts
+index 378dd73..7378bd6 100644
+--- a/src/lib/settings.ts
++++ b/src/lib/settings.ts
+@@ -3,11 +3,16 @@
+ // (generate voucher, sync MikroTik, print) bisa baca harga & identitas
+ // brand yang SAMA dengan yang diatur admin di halaman Pengaturan.
+ 
++export type VoucherTemplate = "klasik" | "tiket" | "struk"
++
+ export type AppSettings = {
+   brandName: string
+   waNumber: string
+   wifiName: string
+   prices: Record<string, number>
++  voucherTemplate: VoucherTemplate
++  logoUrl: string | null
++  logoSize: number
+ }
+ 
+ // Dipakai sebagai fallback kalau baris settings belum ada di database,
+@@ -26,6 +31,9 @@ export const defaultSettings: AppSettings = {
+     "TRIAL-USER": 0,
+     "default": 0,
+   },
++  voucherTemplate: "klasik",
++  logoUrl: null,
++  logoSize: 100,
+ }
+ 
+ // Cari harga untuk sebuah profile. Exact match dulu, kalau tidak ada
+diff --git a/supabase/migrations/004_voucher_template.sql b/supabase/migrations/004_voucher_template.sql
+new file mode 100644
+index 0000000..2e2fc5e
+--- /dev/null
++++ b/supabase/migrations/004_voucher_template.sql
+@@ -0,0 +1,22 @@
++-- Tambahan kolom untuk fitur Template Voucher (per router).
++
++alter table app_settings add column if not exists voucher_template text not null default 'klasik';
++alter table app_settings add column if not exists logo_url text;
++alter table app_settings add column if not exists logo_size integer not null default 100;
++
++do $$
++begin
++  if not exists (
++    select 1 from pg_constraint where conname = 'app_settings_template_check'
++  ) then
++    alter table app_settings add constraint app_settings_template_check
++      check (voucher_template in ('klasik', 'tiket', 'struk'));
++  end if;
++end $$;
++
++-- Migrasi otomatis: kalau brand router itu "Mamanaiy.net" dan dia belum
++-- punya logo_url, isikan logo wordmark yang sebelumnya di-hardcode di kode
++-- (menggantikan logika lama supaya sekarang diatur dari sini saja).
++update app_settings
++set logo_url = '/logo/mamanaiy-wordmark.png'
++where lower(trim(brand_name)) = 'mamanaiy.net' and logo_url is null;
