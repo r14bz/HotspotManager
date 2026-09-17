@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getMikrotikConnection } from "@/lib/mikrotik"
+import { getDurationLabel } from "@/lib/duration"
 
 function generateCode(length = 7) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
@@ -9,18 +10,6 @@ function generateCode(length = 7) {
     result += chars.charAt(Math.floor(Math.random() * chars.length))
   }
   return result
-}
-
-// Mapping untuk tampilan print (durasi)
-const durationMap: Record<string, string> = {
-  "2jam/2k": "2 Jam",
-  "5jam/3rb": "5 Jam",
-  "10jam/5rb": "10 Jam",
-  "24jam/10rb": "1 Hari",
-  "MINGGUAN": "7 Hari",
-  "BULANAN": "30 Hari",
-  "TRIAL-USER": "2 Menit",
-  "default": "-",
 }
 
 export async function POST(req: NextRequest) {
@@ -83,8 +72,8 @@ export async function POST(req: NextRequest) {
             password: code,
             profile,
             price: Number(price) || 0,
-            validity: durationMap[profile] || profile,
-            timelimit: durationMap[profile] || profile,
+            validity: getDurationLabel(profile),
+            timelimit: getDurationLabel(profile),
           })
         } catch (err: any) {
           failed.push(code)

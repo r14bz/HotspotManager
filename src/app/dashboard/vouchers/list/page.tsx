@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useActiveRouter } from "@/lib/router-context"
+import { getDurationLabel } from "@/lib/duration"
 import {
   Search,
   Loader2,
@@ -151,8 +152,8 @@ export default function VoucherListPage() {
       password: v.password,
       profile: v.profile_name,
       price: v.price || 0,
-      validity: v.limit_uptime || "1d",
-      timelimit: v.limit_uptime || "1d",
+      validity: getDurationLabel(v.profile_name),
+      timelimit: getDurationLabel(v.profile_name),
     }))
 
     localStorage.setItem("print_vouchers", JSON.stringify(forPrint))
@@ -166,8 +167,8 @@ export default function VoucherListPage() {
         password: v.password,
         profile: v.profile_name,
         price: v.price || 0,
-        validity: v.limit_uptime || "1d",
-        timelimit: v.limit_uptime || "1d",
+        validity: getDurationLabel(v.profile_name),
+        timelimit: getDurationLabel(v.profile_name),
       },
     ]
     localStorage.setItem("print_vouchers", JSON.stringify(forPrint))
