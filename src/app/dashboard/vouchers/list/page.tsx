@@ -29,6 +29,7 @@ type Voucher = {
   limit_uptime?: string
   uptime?: string
   comment?: string
+  note?: string | null
 }
 
 const statusLabel: Record<string, string> = {
@@ -91,8 +92,11 @@ export default function VoucherListPage() {
           data = data.filter((v) => v.status === status)
         }
         if (search) {
-          data = data.filter((v) =>
-            v.username.toLowerCase().includes(search.toLowerCase())
+          const q = search.toLowerCase()
+          data = data.filter(
+            (v) =>
+              v.username.toLowerCase().includes(q) ||
+              (v.note || "").toLowerCase().includes(q)
           )
         }
 
@@ -418,7 +422,7 @@ export default function VoucherListPage() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Cari username..."
+              placeholder="Cari username atau keterangan..."
               className={`${inputClass} w-full pl-9`}
             />
           </div>
@@ -538,7 +542,12 @@ export default function VoucherListPage() {
                         )}
                       </button>
                     </td>
-                    <td className="px-3 py-3 font-mono font-medium text-text-primary">{v.username}</td>
+                    <td className="px-3 py-3">
+                      <div className="font-mono font-medium text-text-primary">{v.username}</div>
+                      {v.note ? (
+                        <div className="text-xs text-text-muted truncate max-w-[160px]">{v.note}</div>
+                      ) : null}
+                    </td>
                     <td className="px-3 py-3 text-text-secondary">{v.profile_name}</td>
                     <td className="px-3 py-3">
                       <PriceCell v={v} />
@@ -618,6 +627,9 @@ export default function VoucherListPage() {
                             {statusLabel[v.status] || v.status}
                           </span>
                         </div>
+                        {v.note ? (
+                          <div className="text-xs text-text-muted truncate mt-0.5">{v.note}</div>
+                        ) : null}
                         <div className="flex items-center justify-between text-xs text-text-secondary mt-1">
                           <span>{v.profile_name}</span>
                           <PriceCell v={v} align="right" />

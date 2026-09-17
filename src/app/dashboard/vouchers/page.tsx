@@ -31,6 +31,7 @@ export default function VouchersPage() {
 
   const [quantity, setQuantity] = useState(10)
   const [prefix, setPrefix] = useState("")
+  const [note, setNote] = useState("")
   const [profile, setProfile] = useState("")
   const [price, setPrice] = useState(0)
   const [prices, setPrices] = useState<Record<string, number>>(defaultSettings.prices)
@@ -107,7 +108,7 @@ export default function VouchersPage() {
       const res = await fetch("/api/vouchers/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ quantity, prefix, profile, price, router_id: activeRouterId }),
+        body: JSON.stringify({ quantity, prefix, profile, price, note, router_id: activeRouterId }),
       })
 
       const data = await res.json()
@@ -208,6 +209,21 @@ export default function VouchersPage() {
                 className={`${inputClass} font-mono`}
               />
             </div>
+          </div>
+
+          <div>
+            <label className={labelClass}>Keterangan (Opsional)</label>
+            <input
+              type="text"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Contoh: Titip jual warung Bu Siti"
+              maxLength={200}
+              className={inputClass}
+            />
+            <p className="text-xs text-text-muted mt-1.5">
+              Buat catatan sendiri, nanti bisa dicari di Kelola Voucher
+            </p>
           </div>
 
           <div>

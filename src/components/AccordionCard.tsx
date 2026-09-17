@@ -35,14 +35,23 @@ export default function AccordionCard({
         </div>
         <ChevronDown
           className={
-            "w-4 h-4 text-text-muted flex-shrink-0 transition-transform " +
+            "w-4 h-4 text-text-muted flex-shrink-0 transition-transform duration-300 " +
             (isOpen ? "rotate-180" : "")
           }
         />
       </button>
-      {isOpen ? (
-        <div className="px-5 pb-5 space-y-4 border-t border-line pt-4">{children}</div>
-      ) : null}
+
+      {/* Animasi expand/collapse pakai trik CSS grid (0fr -> 1fr), supaya
+          tingginya bisa animasi mulus walau isinya "auto height" — tanpa
+          ini, animasi height:auto tidak bisa di-transition langsung di CSS. */}
+      <div
+        className="grid transition-[grid-template-rows] duration-300 ease-in-out"
+        style={{ gridTemplateRows: isOpen ? "1fr" : "0fr" }}
+      >
+        <div className="overflow-hidden">
+          <div className="px-5 pb-5 space-y-4 border-t border-line pt-4">{children}</div>
+        </div>
+      </div>
     </div>
   )
 }

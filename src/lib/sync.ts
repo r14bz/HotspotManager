@@ -17,8 +17,8 @@ export async function syncVouchersFromMikrotik(routerId: string) {
 
   // Harga diambil dari Supabase (diatur admin di Pengaturan) UNTUK ROUTER INI.
   let prices = defaultSettings.prices
+  const supabase = await createClient()
   try {
-    const supabase = await createClient()
     const { data: settingsRow } = await supabase
       .from("app_settings")
       .select("prices")
@@ -30,6 +30,31 @@ export async function syncVouchersFromMikrotik(routerId: string) {
     }
   } catch {
     // pakai default
+  }
+
+  // Ambil data yang sudah tercatat di Supabase LEBIH DULU (termasuk note),
+  // supaya bisa dilampirkan ke tiap voucher di respons DAN dipertahankan
+  // (tidak ketimpa) saat upsert nanti.
+  const usernamesFromMikrotik = (users || []).map((u: any) => u.name).filter(Boolean)
+  const existingByUsername = new Map<
+    string,
+    { status: string | null; used_at: string | null; price: number | null; note: string | null }
+  >()
+
+  if (usernamesFromMikrotik.length > 0) {
+    try {
+      const { data: existing } = await supabase
+        .from("vouchers")
+        .select("username, status, used_at, price, note")
+        .eq("router_id", routerId)
+        .in("username", usernamesFromMikrotik)
+
+      for (const row of existing || []) {
+        existingByUsername.set(row.username, row)
+      }
+    } catch {
+      // lanjut tanpa data existing
+    }
   }
 
   const list = (users || []).map((u: any) => {
@@ -59,6 +84,7 @@ export async function syncVouchersFromMikrotik(routerId: string) {
       uptime,
       disabled,
       comment: u.comment || "",
+      note: existingByUsername.get(username)?.note ?? null,
       status,
       bytesIn,
       bytesOut,
@@ -67,26 +93,6 @@ export async function syncVouchersFromMikrotik(routerId: string) {
 
   let synced = false
   try {
-    const supabase = await createClient()
-
-    const usernames = list.map((v) => v.username).filter(Boolean)
-    const existingByUsername = new Map<
-      string,
-      { status: string | null; used_at: string | null; price: number | null }
-    >()
-
-    if (usernames.length > 0) {
-      const { data: existing } = await supabase
-        .from("vouchers")
-        .select("username, status, used_at, price")
-        .eq("router_id", routerId)
-        .in("username", usernames)
-
-      for (const row of existing || []) {
-        existingByUsername.set(row.username, row)
-      }
-    }
-
     const payloads = list.map((v) => {
       const existing = existingByUsername.get(v.username)
       const wasAlreadyUsed =
@@ -102,6 +108,9 @@ export async function syncVouchersFromMikrotik(routerId: string) {
         limit_uptime: v.limit_uptime,
         status: v.status === "online" ? "used" : v.status,
         comment: v.comment,
+        // note TIDAK disertakan di sini supaya tidak menimpa nilai yang
+        // sudah ada — kolom ini cuma pernah diisi manual saat generate,
+        // sync tidak pernah mengubahnya.
         used_at:
           isUsedNow && !wasAlreadyUsed
             ? new Date().toISOString()

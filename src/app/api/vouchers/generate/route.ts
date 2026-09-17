@@ -26,7 +26,7 @@ const durationMap: Record<string, string> = {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { quantity, prefix, profile, price, router_id } = body
+    const { quantity, prefix, profile, price, router_id, note } = body
 
     if (!quantity || !profile) {
       return NextResponse.json(
@@ -132,6 +132,7 @@ export async function POST(req: NextRequest) {
         price: Number(price) || 0,
         status: "unused",
         comment: `batch-${batch?.id || "x"}`,
+        note: note ? String(note).trim().slice(0, 200) : null,
       }))
 
       await supabase.from("vouchers").insert(rows)
