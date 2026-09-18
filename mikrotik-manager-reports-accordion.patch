@@ -1,0 +1,180 @@
+diff --git a/src/app/dashboard/reports/page.tsx b/src/app/dashboard/reports/page.tsx
+index dae2b87..1e75964 100644
+--- a/src/app/dashboard/reports/page.tsx
++++ b/src/app/dashboard/reports/page.tsx
+@@ -2,6 +2,7 @@
+ 
+ import { useEffect, useState, Fragment } from "react"
+ import { useActiveRouter } from "@/lib/router-context"
++import AccordionCard from "@/components/AccordionCard"
+ import {
+   BarChart3,
+   DollarSign,
+@@ -12,7 +13,6 @@ import {
+   RefreshCw,
+   Download,
+   Upload,
+-  ChevronDown,
+   ChevronRight,
+ } from "lucide-react"
+ 
+@@ -82,6 +82,7 @@ export default function ReportsPage() {
+   const [importing, setImporting] = useState(false)
+   const [importResult, setImportResult] = useState<string | null>(null)
+   const [expandedDate, setExpandedDate] = useState<string | null>(null)
++  const [profileCardOpen, setProfileCardOpen] = useState(false)
+ 
+   const fetchReport = async (m: string) => {
+     if (!activeRouterId) return
+@@ -335,38 +336,36 @@ export default function ReportsPage() {
+               ))}
+             </div>
+ 
+-            <div className="bg-surface rounded-xl border border-line">
+-              <div className="px-5 py-4 border-b border-line">
+-                <h3 className="font-semibold text-text-primary flex items-center gap-2 text-sm">
+-                  <BarChart3 className="w-4 h-4 text-signal-dark" />
+-                  Berdasarkan Profile
+-                </h3>
+-              </div>
+-              <div className="p-5">
+-                {Object.keys(byProfile).length === 0 ? (
+-                  <p className="text-text-muted text-sm text-center py-6">Belum ada data</p>
+-                ) : (
+-                  <div className="space-y-3">
+-                    {Object.entries(byProfile).map(([name, info]: any) => (
+-                      <div
+-                        key={name}
+-                        className="flex items-center justify-between py-2 border-b border-line last:border-0"
+-                      >
+-                        <div>
+-                          <p className="font-medium text-text-primary text-sm">{name}</p>
+-                          <p className="text-xs text-text-secondary font-mono">
+-                            {info.count} generate · {info.used} dipakai
+-                          </p>
+-                        </div>
+-                        <p className="font-mono font-semibold text-signal-dark">
+-                          Rp {(info.revenue || 0).toLocaleString("id-ID")}
++            <AccordionCard
++              title="Berdasarkan Profile"
++              subtitle={`${Object.keys(byProfile).length} profile`}
++              icon={<BarChart3 className="w-4 h-4 text-signal-dark flex-shrink-0" />}
++              isOpen={profileCardOpen}
++              onToggle={() => setProfileCardOpen((v) => !v)}
++            >
++              {Object.keys(byProfile).length === 0 ? (
++                <p className="text-text-muted text-sm text-center py-6">Belum ada data</p>
++              ) : (
++                <div className="space-y-3">
++                  {Object.entries(byProfile).map(([name, info]: any) => (
++                    <div
++                      key={name}
++                      className="flex items-center justify-between py-2 border-b border-line last:border-0"
++                    >
++                      <div>
++                        <p className="font-medium text-text-primary text-sm">{name}</p>
++                        <p className="text-xs text-text-secondary font-mono">
++                          {info.count} generate · {info.used} dipakai
+                         </p>
+                       </div>
+-                    ))}
+-                  </div>
+-                )}
+-              </div>
+-            </div>
++                      <p className="font-mono font-semibold text-signal-dark">
++                        Rp {(info.revenue || 0).toLocaleString("id-ID")}
++                      </p>
++                    </div>
++                  ))}
++                </div>
++              )}
++            </AccordionCard>
+ 
+             <div className="bg-surface rounded-xl border border-line overflow-hidden">
+               <div className="px-5 py-4 border-b border-line">
+@@ -404,11 +403,12 @@ export default function ReportsPage() {
+                                 className="border-b border-line last:border-0 hover:bg-paper/60 cursor-pointer"
+                               >
+                                 <td className="px-4 py-2.5 text-text-muted">
+-                                  {isOpen ? (
+-                                    <ChevronDown className="w-3.5 h-3.5" />
+-                                  ) : (
+-                                    <ChevronRight className="w-3.5 h-3.5" />
+-                                  )}
++                                  <ChevronRight
++                                    className={
++                                      "w-3.5 h-3.5 transition-transform duration-300 " +
++                                      (isOpen ? "rotate-90" : "")
++                                    }
++                                  />
+                                 </td>
+                                 <td className="px-4 py-2.5 text-text-primary text-xs sm:text-sm">
+                                   {formatDateLabel(date)}
+@@ -420,35 +420,40 @@ export default function ReportsPage() {
+                                   Rp {(info.revenue || 0).toLocaleString("id-ID")}
+                                 </td>
+                               </tr>
+-                              {isOpen && (
+-                                <tr className="bg-paper/60 border-b border-line last:border-0">
+-                                  <td colSpan={4} className="px-4 py-3">
+-                                    <div className="space-y-1.5">
+-                                      {(info.items || []).map((it: any, idx: number) => (
+-                                        <div
+-                                          key={idx}
+-                                          className="flex items-center justify-between text-xs bg-surface border border-line rounded-lg px-3 py-1.5"
+-                                        >
+-                                          <div className="flex items-center gap-2 min-w-0">
+-                                            <span className="font-mono font-medium text-text-primary truncate">
+-                                              {it.username}
+-                                            </span>
+-                                            <span className="text-text-muted">{it.profile_name}</span>
+-                                            {formatTimeLabel(it.used_at) && (
+-                                              <span className="font-mono text-text-muted flex-shrink-0">
+-                                                {formatTimeLabel(it.used_at)}
++                              <tr className="bg-paper/60 border-b border-line last:border-0">
++                                <td colSpan={4} className="p-0">
++                                  <div
++                                    className="grid transition-[grid-template-rows] duration-300 ease-in-out"
++                                    style={{ gridTemplateRows: isOpen ? "1fr" : "0fr" }}
++                                  >
++                                    <div className="overflow-hidden">
++                                      <div className="px-4 py-3 space-y-1.5">
++                                        {(info.items || []).map((it: any, idx: number) => (
++                                          <div
++                                            key={idx}
++                                            className="flex items-center justify-between text-xs bg-surface border border-line rounded-lg px-3 py-1.5"
++                                          >
++                                            <div className="flex items-center gap-2 min-w-0">
++                                              <span className="font-mono font-medium text-text-primary truncate">
++                                                {it.username}
+                                               </span>
+-                                            )}
++                                              <span className="text-text-muted">{it.profile_name}</span>
++                                              {formatTimeLabel(it.used_at) && (
++                                                <span className="font-mono text-text-muted flex-shrink-0">
++                                                  {formatTimeLabel(it.used_at)}
++                                                </span>
++                                              )}
++                                            </div>
++                                            <span className="font-mono text-signal-dark flex-shrink-0">
++                                              Rp {(it.price || 0).toLocaleString("id-ID")}
++                                            </span>
+                                           </div>
+-                                          <span className="font-mono text-signal-dark flex-shrink-0">
+-                                            Rp {(it.price || 0).toLocaleString("id-ID")}
+-                                          </span>
+-                                        </div>
+-                                      ))}
++                                        ))}
++                                      </div>
+                                     </div>
+-                                  </td>
+-                                </tr>
+-                              )}
++                                  </div>
++                                </td>
++                              </tr>
+                             </Fragment>
+                           )
+                         })
