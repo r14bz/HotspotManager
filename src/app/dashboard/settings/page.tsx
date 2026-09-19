@@ -288,42 +288,15 @@ export default function SettingsPage() {
                 key={opt.id}
                 onClick={() => setSettings({ ...settings, voucherTemplate: opt.id })}
                 className={
-                  "rounded-lg border-2 p-2 flex flex-col items-center gap-1.5 transition-colors " +
+                  "rounded-lg border-2 py-2.5 px-2 flex items-center justify-center transition-colors " +
                   (settings.voucherTemplate === opt.id
                     ? "border-signal bg-signal-soft"
                     : "border-line hover:border-signal/40")
                 }
               >
-                <div
-                  style={{
-                    width: "108px",
-                    height: "46px",
-                    overflow: "hidden",
-                    position: "relative",
-                  }}
-                >
-                  <div
-                    style={{
-                      transform: "scale(0.43)",
-                      transformOrigin: "top left",
-                      pointerEvents: "none",
-                    }}
-                  >
-                    <VoucherCard
-                      voucher={sampleVoucher}
-                      brandName={settings.brandName}
-                      waNumber={settings.waNumber}
-                      logoUrl={settings.logoUrl}
-                      logoSize={settings.logoSize}
-                      logoOffsetX={settings.logoOffsetX}
-                      template={opt.id}
-                      dateLabel="Contoh"
-                    />
-                  </div>
-                </div>
                 <span
                   className={
-                    "text-xs font-medium " +
+                    "text-sm font-medium " +
                     (settings.voucherTemplate === opt.id ? "text-signal-dark" : "text-text-secondary")
                   }
                 >
