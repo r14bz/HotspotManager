@@ -1,27 +1,24 @@
-import { createServerClient } from "@supabase/ssr"
-import { cookies } from "next/headers"
+import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 
+// Client server-side memakai SERVICE ROLE key, yang melewati RLS.
+// Key ini HANYA boleh ada di environment variable server (Vercel),
+// jangan pernah pakai awalan NEXT_PUBLIC_ dan jangan import file ini
+// dari komponen client ("use client").
+//
+// Semua tabel dikunci dengan RLS tanpa policy (lihat migrasi 006),
+// jadi anon key tidak bisa mengakses data sama sekali. Otorisasi
+// aplikasi dilakukan oleh middleware (cek cookie admin_session).
 export async function createClient() {
-  const cookieStore = await cookies()
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll()
-        },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            )
-          } catch {
-            // Ignore di Server Component
-          }
-        },
-      },
-    }
-  )
+  if (!url || !key) {
+    throw new Error(
+      "NEXT_PUBLIC_SUPABASE_URL atau SUPABASE_SERVICE_ROLE_KEY belum diset"
+    )
+  }
+
+  return createSupabaseClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
 }

@@ -1,0 +1,155 @@
+diff --git a/src/lib/supabase/server.ts b/src/lib/supabase/server.ts
+index 2a15196..b59c82f 100644
+--- a/src/lib/supabase/server.ts
++++ b/src/lib/supabase/server.ts
+@@ -1,27 +1,24 @@
+-import { createServerClient } from "@supabase/ssr"
+-import { cookies } from "next/headers"
++import { createClient as createSupabaseClient } from "@supabase/supabase-js"
+ 
++// Client server-side memakai SERVICE ROLE key, yang melewati RLS.
++// Key ini HANYA boleh ada di environment variable server (Vercel),
++// jangan pernah pakai awalan NEXT_PUBLIC_ dan jangan import file ini
++// dari komponen client ("use client").
++//
++// Semua tabel dikunci dengan RLS tanpa policy (lihat migrasi 006),
++// jadi anon key tidak bisa mengakses data sama sekali. Otorisasi
++// aplikasi dilakukan oleh middleware (cek cookie admin_session).
+ export async function createClient() {
+-  const cookieStore = await cookies()
++  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
++  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+ 
+-  return createServerClient(
+-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+-    {
+-      cookies: {
+-        getAll() {
+-          return cookieStore.getAll()
+-        },
+-        setAll(cookiesToSet) {
+-          try {
+-            cookiesToSet.forEach(({ name, value, options }) =>
+-              cookieStore.set(name, value, options)
+-            )
+-          } catch {
+-            // Ignore di Server Component
+-          }
+-        },
+-      },
+-    }
+-  )
++  if (!url || !key) {
++    throw new Error(
++      "NEXT_PUBLIC_SUPABASE_URL atau SUPABASE_SERVICE_ROLE_KEY belum diset"
++    )
++  }
++
++  return createSupabaseClient(url, key, {
++    auth: { persistSession: false, autoRefreshToken: false },
++  })
+ }
+diff --git a/src/middleware.ts b/src/middleware.ts
+index db3a2c2..e5e894c 100644
+--- a/src/middleware.ts
++++ b/src/middleware.ts
+@@ -1,11 +1,26 @@
+ import { NextRequest, NextResponse } from "next/server"
+ import { verifySessionToken } from "@/lib/session"
+ 
++// API yang memang boleh diakses tanpa sesi admin:
++// - login/logout: pintu masuk & keluar
++// - cron/sync: punya proteksi sendiri (CRON_SECRET)
++const PUBLIC_API = new Set([
++  "/api/auth/login",
++  "/api/auth/logout",
++  "/api/cron/sync",
++])
++
+ export async function middleware(req: NextRequest) {
+   const { pathname } = req.nextUrl
+ 
+-  // Hanya proteksi dashboard
+-  if (!pathname.startsWith("/dashboard")) {
++  const isApi = pathname.startsWith("/api/")
++  const isDashboard = pathname.startsWith("/dashboard")
++
++  if (!isApi && !isDashboard) {
++    return NextResponse.next()
++  }
++
++  if (isApi && PUBLIC_API.has(pathname)) {
+     return NextResponse.next()
+   }
+ 
+@@ -13,6 +28,14 @@ export async function middleware(req: NextRequest) {
+   const valid = await verifySessionToken(session)
+ 
+   if (!valid) {
++    // API: balas 401 JSON, jangan redirect ke halaman login
++    if (isApi) {
++      return NextResponse.json(
++        { success: false, message: "Tidak diizinkan" },
++        { status: 401 }
++      )
++    }
++
+     const loginUrl = new URL("/login", req.url)
+     loginUrl.searchParams.set("next", pathname)
+     return NextResponse.redirect(loginUrl)
+@@ -22,5 +45,5 @@ export async function middleware(req: NextRequest) {
+ }
+ 
+ export const config = {
+-  matcher: ["/dashboard/:path*"],
++  matcher: ["/dashboard/:path*", "/api/:path*"],
+ }
+diff --git a/supabase/migrations/006_enable_rls.sql b/supabase/migrations/006_enable_rls.sql
+new file mode 100644
+index 0000000..e3bf64c
+--- /dev/null
++++ b/supabase/migrations/006_enable_rls.sql
+@@ -0,0 +1,42 @@
++-- ============================================================
++-- KUNCI DATABASE DENGAN RLS
++--
++-- PRASYARAT (WAJIB, urut):
++--   1. SUPABASE_SERVICE_ROLE_KEY sudah diset di Vercel
++--   2. Kode terbaru (server.ts pakai service role) sudah di-deploy
++--   3. Fitur aplikasi sudah dites jalan
++-- Kalau SQL ini dijalankan SEBELUM itu, aplikasi akan error.
++--
++-- Hasil: RLS aktif TANPA policy = anon key ditolak total.
++-- Service role key (server) tetap bisa akses karena melewati RLS.
++-- ============================================================
++
++-- 1) Hapus SEMUA policy lama di schema public (mis. policy longgar
++--    yang bikin peringatan "Policy Exists RLS Disabled").
++do $$
++declare p record;
++begin
++  for p in
++    select schemaname, tablename, policyname
++    from pg_policies
++    where schemaname = 'public'
++  loop
++    execute format('drop policy %I on %I.%I',
++      p.policyname, p.schemaname, p.tablename);
++  end loop;
++end $$;
++
++-- 2) Aktifkan RLS di semua tabel yang dipakai aplikasi.
++alter table public.vouchers        enable row level security;
++alter table public.voucher_batches enable row level security;
++alter table public.routers         enable row level security;
++alter table public.admin_config    enable row level security;
++alter table public.app_settings    enable row level security;
++
++-- Opsional: tabel lama yang tidak dipakai kode (sudah RLS aktif,
++-- hanya memastikan). Hapus baris di bawah kalau tabelnya tidak ada.
++alter table if exists public.hotspot_profiles enable row level security;
++alter table if exists public.sales            enable row level security;
++
++-- ROLLBACK darurat untuk satu tabel (sementara):
++--   alter table public.NAMA_TABEL disable row level security;
