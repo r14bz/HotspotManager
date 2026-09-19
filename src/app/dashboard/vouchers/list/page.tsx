@@ -366,6 +366,12 @@ export default function VoucherListPage() {
   const inputClass =
     "border border-line rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-signal/40 focus:border-signal"
 
+  // PENTING: PriceCell & ActionButtons dipanggil sebagai FUNGSI biasa
+  // ({PriceCell({ v })}), bukan sebagai komponen (<PriceCell />). Karena
+  // keduanya didefinisikan di dalam komponen halaman, kalau dipakai sebagai
+  // komponen React menganggapnya tipe baru di tiap render dan membongkar-
+  // pasang ulang SEMUA baris saat expand/collapse -> animasi jadi patah/
+  // tidak terlihat.
   const PriceCell = ({ v, align = "left" }: { v: Voucher; align?: "left" | "right" }) => {
     const isEditing = editingUsername === v.username
 
@@ -671,7 +677,12 @@ export default function VoucherListPage() {
                     className="grid transition-[grid-template-rows] duration-300 ease-in-out"
                     style={{ gridTemplateRows: isOpen ? "1fr" : "0fr" }}
                   >
-                    <div className="overflow-hidden">
+                    <div
+                      className={
+                        "overflow-hidden transition-opacity duration-300 ease-in-out " +
+                        (isOpen ? "opacity-100" : "opacity-0")
+                      }
+                    >
                       <div className="border-t border-line">
                         {/* Desktop table */}
                         <div className="hidden md:block overflow-x-auto">
@@ -705,7 +716,7 @@ export default function VoucherListPage() {
                                     ) : null}
                                   </td>
                                   <td className="px-3 py-3">
-                                    <PriceCell v={v} />
+                                    {PriceCell({ v })}
                                   </td>
                                   <td className="px-3 py-3">
                                     <span
@@ -720,7 +731,7 @@ export default function VoucherListPage() {
                                   <td className="px-3 py-3 font-mono text-text-muted text-xs">{v.uptime || "-"}</td>
                                   <td className="px-3 py-3">
                                     <div className="flex justify-end">
-                                      <ActionButtons v={v} />
+                                      {ActionButtons({ v })}
                                     </div>
                                   </td>
                                 </tr>
@@ -759,13 +770,13 @@ export default function VoucherListPage() {
                                     <div className="text-xs text-text-muted truncate mt-0.5">{v.note}</div>
                                   ) : null}
                                   <div className="flex items-center justify-end text-xs text-text-secondary mt-1">
-                                    <PriceCell v={v} align="right" />
+                                    {PriceCell({ v, align: "right" })}
                                   </div>
                                   <div className="flex items-center justify-between mt-2">
                                     <span className="font-mono text-[11px] text-text-muted">
                                       {v.uptime ? "up " + v.uptime : "-"}
                                     </span>
-                                    <ActionButtons v={v} />
+                                    {ActionButtons({ v })}
                                   </div>
                                 </div>
                               </div>
