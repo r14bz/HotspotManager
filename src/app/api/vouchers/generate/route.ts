@@ -96,11 +96,17 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // 3. Catat ke Supabase (untuk laporan)
+    // 3. Catat ke Supabase (untuk laporan). supabase-js TIDAK melempar
+    //    exception saat query ditolak database, jadi `error` dicek manual,
+    //    dicoba ulang sekali, dan kalau tetap gagal pengguna diberi peringatan
+    //    (voucher sudah terlanjur aktif di MikroTik).
+    let dbWarning: string | null = null
     try {
       const supabase = await createClient()
 
-      const { data: batch } = await supabase
+      // voucher_batches hanya log; kalau gagal, voucher tetap dicatat
+      // tanpa batch_id.
+      const { data: batch, error: batchErr } = await supabase
         .from("voucher_batches")
         .insert({
           router_id,
@@ -111,6 +117,10 @@ export async function POST(req: NextRequest) {
         })
         .select()
         .single()
+
+      if (batchErr) {
+        console.error("Supabase batch insert gagal:", batchErr.message)
+      }
 
       const rows = codes.map((code) => ({
         router_id,
@@ -124,17 +134,53 @@ export async function POST(req: NextRequest) {
         note: note ? String(note).trim().slice(0, 200) : null,
       }))
 
-      await supabase.from("vouchers").insert(rows)
+      let failedRows = 0
+      let lastError = ""
+
+      for (let i = 0; i < rows.length; i += 100) {
+        const part = rows.slice(i, i + 100)
+
+        let { error } = await supabase
+          .from("vouchers")
+          .upsert(part, { onConflict: "router_id,username" })
+
+        if (error) {
+          await new Promise((resolve) => setTimeout(resolve, 400))
+          ;({ error } = await supabase
+            .from("vouchers")
+            .upsert(part, { onConflict: "router_id,username" }))
+        }
+
+        if (error) {
+          failedRows += part.length
+          lastError = error.message
+          console.error("Supabase voucher insert gagal:", error.message)
+        }
+      }
+
+      if (failedRows > 0) {
+        dbWarning =
+          `${failedRows} voucher belum tercatat di database (${lastError}). ` +
+          "Voucher tetap aktif di MikroTik dan akan tercatat saat Sync berikutnya, " +
+          "tetapi Keterangan-nya tidak tersimpan."
+      }
     } catch (dbErr: any) {
       console.error("Supabase save failed (users already on MT):", dbErr?.message)
+      dbWarning =
+        "Voucher belum tercatat di database (" +
+        (dbErr?.message || "error") +
+        "). Voucher tetap aktif di MikroTik dan akan tercatat saat Sync berikutnya."
     }
 
     return NextResponse.json({
       success: true,
-      message: `Berhasil membuat ${codes.length} voucher di MikroTik`,
+      message:
+        `Berhasil membuat ${codes.length} voucher di MikroTik` +
+        (dbWarning ? `. Peringatan: ${dbWarning}` : ""),
       count: codes.length,
       vouchers: vouchersForPrint,
       failed: failed.length,
+      warning: dbWarning || undefined,
     })
   } catch (error: any) {
     return NextResponse.json(

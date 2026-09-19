@@ -25,6 +25,51 @@ function parseUptimeSeconds(uptime: string): number {
   return total
 }
 
+type SupabaseServer = Awaited<ReturnType<typeof createClient>>
+
+// MikroTik = sumber kebenaran. Baris voucher yang BELUM PERNAH dipakai dan
+// sudah tidak ada di MikroTik (mis. dihapus lewat WinBox) dibersihkan dari
+// database supaya angka "Belum Dipakai" di laporan tidak menggembung.
+// Voucher yang sudah terpakai TIDAK pernah disentuh (arsip laporan).
+async function pruneOrphanUnused(
+  supabase: SupabaseServer,
+  routerId: string,
+  keep: Set<string>
+) {
+  const PAGE = 1000
+  const orphans: string[] = []
+
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from("vouchers")
+      .select("username")
+      .eq("router_id", routerId)
+      .eq("status", "unused")
+      .is("used_at", null)
+      .is("sold_at", null)
+      .order("username", { ascending: true })
+      .range(from, from + PAGE - 1)
+
+    if (error) throw error
+    for (const row of data || []) {
+      if (!keep.has(row.username)) orphans.push(row.username)
+    }
+    if (!data || data.length < PAGE) break
+  }
+
+  for (const part of chunk(orphans, IN_CHUNK)) {
+    const { error } = await supabase
+      .from("vouchers")
+      .delete()
+      .eq("router_id", routerId)
+      .eq("status", "unused")
+      .is("used_at", null)
+      .is("sold_at", null)
+      .in("username", part)
+    if (error) throw error
+  }
+}
+
 type ExistingRow = {
   username: string
   status: string | null
@@ -122,7 +167,12 @@ export async function syncVouchersFromMikrotik(routerId: string) {
     const existing = existingByUsername.get(username)
     const wasAlreadyUsed =
       existing?.status === "used" || existing?.status === "online" || !!existing?.used_at
-    const isUsedNow = status === "used" || status === "online"
+    // Voucher yang di-disable setelah dipakai (status "disabled" tapi ada
+    // uptime/traffic) tetap dianggap terpakai, supaya tercatat di laporan.
+    const isUsedNow =
+      status === "used" ||
+      status === "online" ||
+      (disabled && !!(hasUptime || hasTraffic))
 
     // --- Harga ---
     let price: number
@@ -192,6 +242,17 @@ export async function syncVouchersFromMikrotik(routerId: string) {
       synced = true
     } catch (e) {
       console.error("Sync Supabase failed:", e)
+    }
+
+    // Hanya bersihkan kalau upsert sukses DAN MikroTik mengembalikan daftar
+    // yang tidak kosong (daftar kosong lebih mungkin gangguan daripada
+    // kenyataan, jadi jangan dipakai sebagai dasar menghapus).
+    if (synced && usernamesFromMikrotik.length > 0) {
+      try {
+        await pruneOrphanUnused(supabase, routerId, new Set(usernamesFromMikrotik))
+      } catch (e) {
+        console.error("Sync: gagal membersihkan voucher yatim:", e)
+      }
     }
   }
 

@@ -65,16 +65,38 @@ export async function POST(req: NextRequest) {
       } catch (_) {}
     }
 
-    // Update Supabase
+    // Update Supabase. supabase-js TIDAK melempar exception saat query
+    // ditolak database, jadi `error` harus dicek manual.
+    // Saat di-enable, status kembali ke "used" kalau voucher pernah dipakai
+    // (sebelumnya selalu "unused", padahal voucher terpakai bukan "unused").
+    let warning: string | undefined
     try {
       const supabase = await createClient()
-      await supabase
+
+      const { data: row, error: selErr } = await supabase
         .from("vouchers")
-        .update({ status: disabled ? "disabled" : "unused" })
+        .select("used_at, sold_at")
         .eq("router_id", router_id)
         .eq("username", username)
-    } catch (e) {
+        .maybeSingle()
+
+      if (selErr) throw selErr
+
+      const wasUsed = !!(row?.used_at || row?.sold_at)
+      const newStatus = disabled ? "disabled" : wasUsed ? "used" : "unused"
+
+      const { error: updErr } = await supabase
+        .from("vouchers")
+        .update({ status: newStatus })
+        .eq("router_id", router_id)
+        .eq("username", username)
+
+      if (updErr) throw updErr
+    } catch (e: any) {
       console.error("Supabase update failed:", e)
+      warning =
+        "Status di MikroTik sudah berubah, tetapi gagal dicatat ke database " +
+        "(akan diperbaiki saat Sync berikutnya)."
     }
 
     return NextResponse.json({
@@ -82,6 +104,7 @@ export async function POST(req: NextRequest) {
       message: disabled
         ? "Voucher berhasil di-disable"
         : "Voucher berhasil di-enable",
+      warning,
     })
   } catch (error: any) {
     return NextResponse.json(
