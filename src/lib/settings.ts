@@ -3,7 +3,7 @@
 // (generate voucher, sync MikroTik, print) bisa baca harga & identitas
 // brand yang SAMA dengan yang diatur admin di halaman Pengaturan.
 
-export type VoucherTemplate = "klasik" | "tiket" | "struk"
+export type VoucherTemplate = "klasik" | "tiket" | "modern"
 
 export type AppSettings = {
   brandName: string
@@ -13,7 +13,7 @@ export type AppSettings = {
   voucherTemplate: VoucherTemplate
   logoUrl: string | null
   logoSize: number
-  // Geser manual logo (px, negatif = ke kiri). Hanya dipakai template Klasik.
+  // Geser manual logo (px, negatif = ke kiri). Dipakai template Klasik & Modern.
   logoOffsetX: number
 }
 

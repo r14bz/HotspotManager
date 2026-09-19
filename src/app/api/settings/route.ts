@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { defaultSettings, AppSettings, VoucherTemplate } from "@/lib/settings"
 
-const VALID_TEMPLATES: VoucherTemplate[] = ["klasik", "tiket", "struk"]
+const VALID_TEMPLATES: VoucherTemplate[] = ["klasik", "tiket", "modern"]
 
 export async function GET(req: NextRequest) {
   const routerId = req.nextUrl.searchParams.get("router_id")
@@ -28,6 +28,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: true, data: defaultSettings, fallback: true })
     }
 
+    // "struk" = template lama yang sudah diganti "modern"
+    const rawTemplate = data.voucher_template === "struk" ? "modern" : data.voucher_template
+
     const settings: AppSettings = {
       brandName: data.brand_name || defaultSettings.brandName,
       waNumber: data.wa_number || defaultSettings.waNumber,
@@ -36,8 +39,8 @@ export async function GET(req: NextRequest) {
         ...defaultSettings.prices,
         ...(data.prices || {}),
       },
-      voucherTemplate: VALID_TEMPLATES.includes(data.voucher_template)
-        ? data.voucher_template
+      voucherTemplate: VALID_TEMPLATES.includes(rawTemplate)
+        ? rawTemplate
         : defaultSettings.voucherTemplate,
       logoUrl: data.logo_url || null,
       logoSize: data.logo_size || defaultSettings.logoSize,

@@ -21,7 +21,7 @@ import VoucherCard from "@/components/VoucherCard"
 const TEMPLATE_OPTIONS: { id: VoucherTemplate; label: string }[] = [
   { id: "klasik", label: "Klasik" },
   { id: "tiket", label: "Tiket" },
-  { id: "struk", label: "Struk" },
+  { id: "modern", label: "Modern" },
 ]
 
 export default function SettingsPage() {
@@ -405,7 +405,7 @@ export default function SettingsPage() {
             </button>
           </div>
           <p className="text-xs text-text-muted mt-1.5">
-            Negatif = ke kiri, positif = ke kanan. Khusus template Klasik. Posisi sudah
+            Negatif = ke kiri, positif = ke kanan. Berlaku untuk template Klasik dan Modern. Posisi sudah
             disesuaikan otomatis dengan padding logo; pakai ini hanya untuk koreksi tambahan.
           </p>
         </div>

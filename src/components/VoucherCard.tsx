@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { QRCodeSVG } from "qrcode.react"
 
-export type VoucherTemplate = "klasik" | "tiket" | "struk"
+export type VoucherTemplate = "klasik" | "tiket" | "modern"
 
 export type VoucherCardData = {
   username: string
@@ -262,79 +262,124 @@ export default function VoucherCard({
     )
   }
 
-  // ============ TEMPLATE: STRUK ============
-  if (template === "struk") {
+  // ============ TEMPLATE: MODERN ============
+  // Ukuran sama dengan Klasik (lebar 250px). Header berwarna di atas
+  // (harga + durasi), kode voucher dalam kotak putus-putus, QR di kanan,
+  // footer berisi WA & tanggal.
+  if (template === "modern") {
     return (
       <div
         style={{
           display: "inline-flex",
           flexDirection: "column",
-          alignItems: "center",
           width: "250px",
-          borderRadius: "4px",
+          borderRadius: "8px",
           overflow: "hidden",
           boxShadow: "0 1px 4px rgba(0,0,0,0.12)",
           fontFamily: "Tahoma, Arial, sans-serif",
           background: "#fff",
-          border: `1.5px dashed ${color}`,
+          border: "1px solid #ddd",
           pageBreakInside: "avoid",
-          padding: "14px 16px",
-          textAlign: "center",
         }}
       >
-        <Brand baseHeight={15} textSize="11px" textColor="#111" align="center" />
-
-        <div style={{ width: "100%", borderTop: `1px dashed ${color}`, margin: "9px 0" }} />
-
-        <div style={{ fontSize: "7px", color: "#999", letterSpacing: "1.5px" }}>
-          KODE VOUCHER
-        </div>
         <div
           style={{
-            fontSize: "19px",
-            fontWeight: "bold",
-            color: "#111",
-            letterSpacing: "2px",
-            fontFamily: "'Courier New', monospace",
-            margin: "3px 0 8px",
-          }}
-        >
-          {voucher.username}
-        </div>
-
-        <div
-          style={{
-            width: "100%",
             display: "flex",
-            justifyContent: "center",
-            marginBottom: "9px",
-          }}
-        >
-          <QRCodeSVG value={voucher.username} size={46} level="M" includeMargin={false} />
-        </div>
-
-        <span
-          style={{
-            display: "inline-block",
-            fontSize: "12px",
-            fontWeight: "bold",
-            color: "#fff",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "4px 10px",
             backgroundColor: color,
-            padding: "3px 14px",
-            borderRadius: "3px",
-            marginBottom: "9px",
+            color: "#fff",
             ...PRINT_COLOR_ADJUST,
           }}
         >
-          {priceLabel}
-        </span>
-
-        <div style={{ width: "100%", borderTop: `1px dashed ${color}`, margin: "0 0 8px" }} />
-
-        <div style={{ fontSize: "8px", color: "#444" }}>
-          {durasi} &middot; WA {waNumber}
+          <span style={{ fontSize: "12px", fontWeight: "bold", letterSpacing: "0.3px" }}>
+            {priceLabel}
+          </span>
+          <span
+            style={{
+              fontSize: "8px",
+              fontWeight: "bold",
+              padding: "2px 8px",
+              borderRadius: "10px",
+              backgroundColor: "rgba(255,255,255,0.25)",
+              ...PRINT_COLOR_ADJUST,
+            }}
+          >
+            {durasi}
+          </span>
         </div>
-        <div style={{ fontSize: "7px", color: "#999", marginTop: "2px" }}>{date}</div>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            padding: "7px 10px 6px",
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {/* Skala logo memakai transform (tidak mengubah tinggi layout),
+                jadi saat logo diperbesar diberi ruang ekstra atas-bawah
+                supaya tidak menabrak header dan label di bawahnya. */}
+            <div
+              style={{
+                margin: `${logoUrl ? Math.max(0, ((scale - 1) * 14) / 2) : 0}px 0 ${
+                  4 + (logoUrl ? Math.max(0, ((scale - 1) * 14) / 2) : 0)
+                }px`,
+              }}
+            >
+              <Brand baseHeight={14} textSize="11px" textColor="#15803D" />
+            </div>
+            <div style={{ fontSize: "7px", color: "#888", letterSpacing: "0.5px", marginBottom: "2px" }}>
+              KODE VOUCHER
+            </div>
+            <div
+              style={{
+                display: "inline-block",
+                padding: "3px 9px",
+                borderRadius: "5px",
+                border: `1px dashed ${color}`,
+                backgroundColor: lightenHex(color, 0.92),
+                fontSize: "15px",
+                fontWeight: "bold",
+                color: "#111",
+                letterSpacing: "1.5px",
+                ...PRINT_COLOR_ADJUST,
+              }}
+            >
+              {voucher.username}
+            </div>
+          </div>
+
+          <div
+            style={{
+              width: "46px",
+              height: "46px",
+              flexShrink: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <QRCodeSVG value={voucher.username} size={44} level="M" includeMargin={false} />
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            padding: "3px 10px 5px",
+            borderTop: "1px solid #eee",
+            fontSize: "7px",
+            color: "#777",
+          }}
+        >
+          <span style={{ fontWeight: "bold", color: "#555" }}>{"WA : " + waNumber}</span>
+          <span>{date}</span>
+        </div>
       </div>
     )
   }
