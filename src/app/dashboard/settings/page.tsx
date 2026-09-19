@@ -315,6 +315,7 @@ export default function SettingsPage() {
                       waNumber={settings.waNumber}
                       logoUrl={settings.logoUrl}
                       logoSize={settings.logoSize}
+                      logoOffsetX={settings.logoOffsetX}
                       template={opt.id}
                       dateLabel="Contoh"
                     />
@@ -361,6 +362,55 @@ export default function SettingsPage() {
         </div>
 
         <div>
+          <label className={labelClass}>
+            Geser Logo — {settings.logoOffsetX > 0 ? "+" : ""}
+            {settings.logoOffsetX}px
+          </label>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                setSettings({ ...settings, logoOffsetX: Math.max(-40, settings.logoOffsetX - 1) })
+              }
+              className="w-10 h-10 flex-shrink-0 rounded-lg border border-line text-text-primary text-lg font-medium"
+              aria-label="Geser ke kiri 1px"
+            >
+              −
+            </button>
+            <input
+              type="range"
+              min={-40}
+              max={40}
+              step={1}
+              value={settings.logoOffsetX}
+              onChange={(e) => setSettings({ ...settings, logoOffsetX: Number(e.target.value) })}
+              className="w-full accent-signal"
+            />
+            <button
+              type="button"
+              onClick={() =>
+                setSettings({ ...settings, logoOffsetX: Math.min(40, settings.logoOffsetX + 1) })
+              }
+              className="w-10 h-10 flex-shrink-0 rounded-lg border border-line text-text-primary text-lg font-medium"
+              aria-label="Geser ke kanan 1px"
+            >
+              +
+            </button>
+            <button
+              type="button"
+              onClick={() => setSettings({ ...settings, logoOffsetX: 0 })}
+              className="h-10 px-3 flex-shrink-0 rounded-lg border border-line text-text-secondary text-xs"
+            >
+              Reset
+            </button>
+          </div>
+          <p className="text-xs text-text-muted mt-1.5">
+            Negatif = ke kiri, positif = ke kanan. Khusus template Klasik. Posisi sudah
+            disesuaikan otomatis dengan padding logo; pakai ini hanya untuk koreksi tambahan.
+          </p>
+        </div>
+
+        <div>
           <label className={labelClass}>Preview</label>
           <div className="bg-paper rounded-lg p-4 flex justify-center">
             <VoucherCard
@@ -369,6 +419,7 @@ export default function SettingsPage() {
               waNumber={settings.waNumber}
               logoUrl={settings.logoUrl}
               logoSize={settings.logoSize}
+              logoOffsetX={settings.logoOffsetX}
               template={settings.voucherTemplate}
               dateLabel="Contoh tanggal"
             />

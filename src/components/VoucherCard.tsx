@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { QRCodeSVG } from "qrcode.react"
 
 export type VoucherTemplate = "klasik" | "tiket" | "struk"
@@ -18,6 +19,7 @@ export type VoucherCardProps = {
   waNumber: string
   logoUrl?: string | null
   logoSize?: number
+  logoOffsetX?: number
   template?: VoucherTemplate
   dateLabel?: string
 }
@@ -65,11 +67,70 @@ export default function VoucherCard({
   waNumber,
   logoUrl,
   logoSize = 100,
+  logoOffsetX = 0,
   template = "klasik",
   dateLabel,
 }: VoucherCardProps) {
   const color = getVoucherColor(voucher.price || 0)
   const scale = (logoSize || 100) / 100
+
+  // Banyak file logo punya area transparan (padding) di sisi kiri, jadi
+  // secara visual logo tampak "menjorok" ke kanan dibanding teks di
+  // bawahnya. Kita ukur lebar padding kiri itu (lewat canvas) lalu
+  // geser logo ke kiri sebesar padding tersebut.
+  // Logo dari domain lain diukur lewat /api/logo-proxy (same-origin) supaya
+  // canvas tidak terblokir CORS. Kalau pengukuran gagal, tidak ada
+  // penggeseran (tampilan tetap normal).
+  const [logoPad, setLogoPad] = useState<{ left: number; height: number } | null>(null)
+
+  useEffect(() => {
+    setLogoPad(null)
+    if (!logoUrl) return
+
+    let cancelled = false
+    const probe = new Image()
+    probe.onload = () => {
+      try {
+        const w = probe.naturalWidth
+        const h = probe.naturalHeight
+        if (!w || !h) return
+
+        const canvas = document.createElement("canvas")
+        canvas.width = w
+        canvas.height = h
+        const ctx = canvas.getContext("2d", { willReadFrequently: true })
+        if (!ctx) return
+        ctx.drawImage(probe, 0, 0)
+        const { data } = ctx.getImageData(0, 0, w, h)
+
+        // Cari kolom paling kiri yang punya piksel tidak transparan
+        let left = w
+        for (let x = 0; x < w && left === w; x++) {
+          for (let y = 0; y < h; y++) {
+            if (data[(y * w + x) * 4 + 3] > 16) {
+              left = x
+              break
+            }
+          }
+        }
+
+        if (!cancelled && left > 0 && left < w) {
+          setLogoPad({ left, height: h })
+        }
+      } catch {
+        // canvas "tainted" (CORS) -> abaikan
+      }
+    }
+    // URL absolut (http/https) lewat proxy; path lokal (/logo/...) dan
+    // data: URL sudah same-origin, langsung dipakai.
+    probe.src = /^https?:\/\//i.test(logoUrl)
+      ? "/api/logo-proxy?url=" + encodeURIComponent(logoUrl)
+      : logoUrl
+
+    return () => {
+      cancelled = true
+    }
+  }, [logoUrl])
   const durasi = formatDurasi(voucher)
   const date =
     dateLabel ||
@@ -106,6 +167,17 @@ export default function VoucherCard({
           display: "block",
           transform: `scale(${scale})`,
           transformOrigin: align === "center" ? "center" : "left center",
+          // Rata kiri: tarik logo ke kiri sebesar padding transparannya
+          // (sudah dikali skala) supaya sejajar dengan teks di bawahnya.
+          // Ditambah geser manual dari Pengaturan (logoOffsetX, px).
+          marginLeft:
+            align === "left"
+              ? `${
+                  (logoPad
+                    ? -(logoPad.left * (baseHeight / logoPad.height) * scale)
+                    : 0) + (logoOffsetX || 0)
+                }px`
+              : undefined,
         }}
       />
     ) : (

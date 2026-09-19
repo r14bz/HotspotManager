@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useActiveRouter } from "@/lib/router-context"
 import { getDurationLabel } from "@/lib/duration"
@@ -18,6 +18,7 @@ import {
   Pencil,
   Check,
   X,
+  ChevronDown,
 } from "lucide-react"
 
 type Voucher = {
@@ -58,6 +59,9 @@ export default function VoucherListPage() {
   const [selected, setSelected] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
+  // Grup profile yang sedang terbuka. Default semua tertutup supaya
+  // halaman tidak panjang; key = nama profile.
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
 
   const [editingUsername, setEditingUsername] = useState<string | null>(null)
   const [editPrice, setEditPrice] = useState("")
@@ -103,6 +107,16 @@ export default function VoucherListPage() {
 
         setVouchers(data)
         setSelected([])
+
+        // Kalau user sedang mencari / memfilter profile, langsung buka
+        // semua grup hasilnya supaya tidak perlu klik satu-satu.
+        if (search || profile !== "all") {
+          const next: Record<string, boolean> = {}
+          data.forEach((v) => {
+            next[v.profile_name || "Tanpa Profile"] = true
+          })
+          setOpenGroups(next)
+        }
       } else {
         setError(json.message || "Gagal memuat data dari MikroTik")
       }
@@ -299,6 +313,56 @@ export default function VoucherListPage() {
     }
   }
 
+  // Kelompokkan voucher per profile. Urutan mengikuti profileOptions,
+  // profile lain (kalau ada) diurutkan abjad di belakangnya.
+  const groups = useMemo(() => {
+    const map = new Map<string, Voucher[]>()
+    vouchers.forEach((v) => {
+      const key = v.profile_name || "Tanpa Profile"
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push(v)
+    })
+    const rank = (name: string) => {
+      const i = profileOptions.indexOf(name)
+      return i === -1 ? profileOptions.length : i
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]))
+      .map(([name, items]) => ({ name, items }))
+  }, [vouchers])
+
+  const allOpen = groups.length > 0 && groups.every((g) => openGroups[g.name])
+
+  const toggleGroup = (name: string) => {
+    setOpenGroups((prev) => ({ ...prev, [name]: !prev[name] }))
+  }
+
+  const toggleAllGroups = () => {
+    const next: Record<string, boolean> = {}
+    groups.forEach((g) => {
+      next[g.name] = !allOpen
+    })
+    setOpenGroups(next)
+  }
+
+  const toggleSelectGroup = (items: Voucher[]) => {
+    const ids = items.map((v) => v.id)
+    const allSelected = ids.every((id) => selected.includes(id))
+    setSelected((prev) =>
+      allSelected
+        ? prev.filter((id) => !ids.includes(id))
+        : Array.from(new Set([...prev, ...ids]))
+    )
+  }
+
+  const countByStatus = (items: Voucher[]) => {
+    const c: Record<string, number> = {}
+    items.forEach((v) => {
+      c[v.status] = (c[v.status] || 0) + 1
+    })
+    return c
+  }
+
   const inputClass =
     "border border-line rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-signal/40 focus:border-signal"
 
@@ -487,169 +551,236 @@ export default function VoucherListPage() {
         )}
       </div>
 
-      <div className="bg-surface rounded-xl border border-line overflow-hidden">
-        {/* Desktop table */}
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-paper border-b border-line">
-              <tr>
-                <th className="px-3 py-3 w-10">
-                  <button onClick={toggleSelectAll} className="text-text-muted">
-                    {selected.length === vouchers.length && vouchers.length > 0 ? (
-                      <CheckSquare className="w-4 h-4 text-signal-dark" />
-                    ) : (
-                      <Square className="w-4 h-4" />
-                    )}
-                  </button>
-                </th>
-                <th className="text-left px-3 py-3 font-medium text-text-secondary">Username</th>
-                <th className="text-left px-3 py-3 font-medium text-text-secondary">Profile</th>
-                <th className="text-left px-3 py-3 font-medium text-text-secondary">Harga</th>
-                <th className="text-left px-3 py-3 font-medium text-text-secondary">Status</th>
-                <th className="text-left px-3 py-3 font-medium text-text-secondary">Uptime</th>
-                <th className="text-right px-3 py-3 font-medium text-text-secondary">Aksi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-text-muted">
-                    <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />
-                    Mengambil data dari MikroTik...
-                  </td>
-                </tr>
-              ) : error ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-danger">
-                    {error}
-                  </td>
-                </tr>
-              ) : vouchers.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-text-muted">
-                    <Ticket className="w-7 h-7 mx-auto mb-2 opacity-40" />
-                    Tidak ada voucher di MikroTik
-                  </td>
-                </tr>
-              ) : (
-                vouchers.map((v) => (
-                  <tr key={v.id} className="border-b border-line last:border-0 hover:bg-paper/60">
-                    <td className="px-3 py-3">
-                      <button onClick={() => toggleSelect(v.id)}>
-                        {selected.includes(v.id) ? (
-                          <CheckSquare className="w-4 h-4 text-signal-dark" />
-                        ) : (
-                          <Square className="w-4 h-4 text-text-muted" />
-                        )}
-                      </button>
-                    </td>
-                    <td className="px-3 py-3">
-                      <div className="font-mono font-medium text-text-primary">{v.username}</div>
-                      {v.note ? (
-                        <div className="text-xs text-text-muted truncate max-w-[160px]">{v.note}</div>
-                      ) : null}
-                    </td>
-                    <td className="px-3 py-3 text-text-secondary">{v.profile_name}</td>
-                    <td className="px-3 py-3">
-                      <PriceCell v={v} />
-                    </td>
-                    <td className="px-3 py-3">
-                      <span
-                        className={
-                          "inline-block px-2.5 py-0.5 rounded-full text-xs font-medium " +
-                          (statusClass[v.status] || "bg-paper text-text-secondary")
-                        }
-                      >
-                        {statusLabel[v.status] || v.status}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3 font-mono text-text-muted text-xs">{v.uptime || "-"}</td>
-                    <td className="px-3 py-3">
-                      <div className="flex justify-end">
-                        <ActionButtons v={v} />
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+      {/* State loading / error / kosong */}
+      {loading ? (
+        <div className="bg-surface rounded-xl border border-line px-4 py-12 text-center text-text-muted text-sm">
+          <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />
+          Mengambil data dari MikroTik...
         </div>
+      ) : error ? (
+        <div className="bg-surface rounded-xl border border-line px-4 py-12 text-center text-danger text-sm">
+          {error}
+        </div>
+      ) : vouchers.length === 0 ? (
+        <div className="bg-surface rounded-xl border border-line px-4 py-12 text-center text-text-muted text-sm">
+          <Ticket className="w-7 h-7 mx-auto mb-2 opacity-40" />
+          Tidak ada voucher di MikroTik
+        </div>
+      ) : (
+        <>
+          {/* Toolbar: pilih semua + buka/tutup semua kategori */}
+          <div className="flex items-center justify-between gap-3 px-1">
+            <button
+              onClick={toggleSelectAll}
+              className="flex items-center gap-2 text-xs text-text-secondary"
+            >
+              {selected.length === vouchers.length ? (
+                <CheckSquare className="w-4 h-4 text-signal-dark" />
+              ) : (
+                <Square className="w-4 h-4 text-text-muted" />
+              )}
+              Pilih semua ({vouchers.length})
+            </button>
+            <button
+              onClick={toggleAllGroups}
+              className="text-xs font-medium text-signal-dark hover:underline"
+            >
+              {allOpen ? "Tutup semua" : "Buka semua"}
+            </button>
+          </div>
 
-        {/* Mobile card list */}
-        <div className="md:hidden">
-          {loading ? (
-            <div className="px-4 py-12 text-center text-text-muted text-sm">
-              <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />
-              Mengambil data dari MikroTik...
-            </div>
-          ) : error ? (
-            <div className="px-4 py-12 text-center text-danger text-sm">{error}</div>
-          ) : vouchers.length === 0 ? (
-            <div className="px-4 py-12 text-center text-text-muted text-sm">
-              <Ticket className="w-7 h-7 mx-auto mb-2 opacity-40" />
-              Tidak ada voucher di MikroTik
-            </div>
-          ) : (
-            <>
-              <button
-                onClick={toggleSelectAll}
-                className="w-full flex items-center gap-2 px-4 py-2.5 border-b border-line text-xs text-text-secondary"
-              >
-                {selected.length === vouchers.length && vouchers.length > 0 ? (
-                  <CheckSquare className="w-4 h-4 text-signal-dark" />
-                ) : (
-                  <Square className="w-4 h-4 text-text-muted" />
-                )}
-                Pilih semua
-              </button>
-              <div className="divide-y divide-line">
-                {vouchers.map((v) => (
-                  <div key={v.id} className="px-4 py-3">
-                    <div className="flex items-start gap-3">
-                      <button onClick={() => toggleSelect(v.id)} className="mt-0.5 flex-shrink-0">
-                        {selected.includes(v.id) ? (
-                          <CheckSquare className="w-4 h-4 text-signal-dark" />
-                        ) : (
-                          <Square className="w-4 h-4 text-text-muted" />
-                        )}
-                      </button>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-mono font-medium text-text-primary text-sm truncate">
-                            {v.username}
+          <div className="space-y-3">
+            {groups.map((g) => {
+              const isOpen = !!openGroups[g.name]
+              const counts = countByStatus(g.items)
+              const groupAllSelected = g.items.every((v) => selected.includes(v.id))
+              const groupSelectedCount = g.items.filter((v) => selected.includes(v.id)).length
+
+              return (
+                <div
+                  key={g.name}
+                  className="bg-surface rounded-xl border border-line overflow-hidden"
+                >
+                  {/* Header kategori */}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    aria-expanded={isOpen}
+                    onClick={() => toggleGroup(g.name)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault()
+                        toggleGroup(g.name)
+                      }
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3.5 text-left cursor-pointer select-none hover:bg-paper/60"
+                  >
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        toggleSelectGroup(g.items)
+                      }}
+                      className="flex-shrink-0"
+                      title="Pilih semua voucher di kategori ini"
+                    >
+                      {groupAllSelected ? (
+                        <CheckSquare className="w-4 h-4 text-signal-dark" />
+                      ) : (
+                        <Square className="w-4 h-4 text-text-muted" />
+                      )}
+                    </button>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-semibold text-text-primary text-sm">{g.name}</h3>
+                        <span className="font-mono text-xs text-text-muted">
+                          {g.items.length} voucher
+                        </span>
+                        {groupSelectedCount > 0 && (
+                          <span className="font-mono text-xs text-signal-dark">
+                            · {groupSelectedCount} dipilih
                           </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                        {Object.entries(counts).map(([st, n]) => (
                           <span
+                            key={st}
                             className={
-                              "flex-shrink-0 px-2 py-0.5 rounded-full text-[11px] font-medium " +
-                              (statusClass[v.status] || "bg-paper text-text-secondary")
+                              "px-2 py-0.5 rounded-full text-[11px] font-medium " +
+                              (statusClass[st] || "bg-paper text-text-secondary")
                             }
                           >
-                            {statusLabel[v.status] || v.status}
+                            {n} {statusLabel[st] || st}
                           </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <ChevronDown
+                      className={
+                        "w-4 h-4 text-text-muted flex-shrink-0 transition-transform duration-300 " +
+                        (isOpen ? "rotate-180" : "")
+                      }
+                    />
+                  </div>
+
+                  {/* Isi kategori: animasi expand/collapse (grid 0fr -> 1fr),
+                      sama seperti kartu di halaman Laporan Penjualan. */}
+                  <div
+                    className="grid transition-[grid-template-rows] duration-300 ease-in-out"
+                    style={{ gridTemplateRows: isOpen ? "1fr" : "0fr" }}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="border-t border-line">
+                        {/* Desktop table */}
+                        <div className="hidden md:block overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead className="bg-paper border-b border-line">
+                              <tr>
+                                <th className="px-3 py-3 w-10"></th>
+                                <th className="text-left px-3 py-3 font-medium text-text-secondary">Username</th>
+                                <th className="text-left px-3 py-3 font-medium text-text-secondary">Harga</th>
+                                <th className="text-left px-3 py-3 font-medium text-text-secondary">Status</th>
+                                <th className="text-left px-3 py-3 font-medium text-text-secondary">Uptime</th>
+                                <th className="text-right px-3 py-3 font-medium text-text-secondary">Aksi</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {g.items.map((v) => (
+                                <tr key={v.id} className="border-b border-line last:border-0 hover:bg-paper/60">
+                                  <td className="px-3 py-3">
+                                    <button onClick={() => toggleSelect(v.id)}>
+                                      {selected.includes(v.id) ? (
+                                        <CheckSquare className="w-4 h-4 text-signal-dark" />
+                                      ) : (
+                                        <Square className="w-4 h-4 text-text-muted" />
+                                      )}
+                                    </button>
+                                  </td>
+                                  <td className="px-3 py-3">
+                                    <div className="font-mono font-medium text-text-primary">{v.username}</div>
+                                    {v.note ? (
+                                      <div className="text-xs text-text-muted truncate max-w-[160px]">{v.note}</div>
+                                    ) : null}
+                                  </td>
+                                  <td className="px-3 py-3">
+                                    <PriceCell v={v} />
+                                  </td>
+                                  <td className="px-3 py-3">
+                                    <span
+                                      className={
+                                        "inline-block px-2.5 py-0.5 rounded-full text-xs font-medium " +
+                                        (statusClass[v.status] || "bg-paper text-text-secondary")
+                                      }
+                                    >
+                                      {statusLabel[v.status] || v.status}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-3 font-mono text-text-muted text-xs">{v.uptime || "-"}</td>
+                                  <td className="px-3 py-3">
+                                    <div className="flex justify-end">
+                                      <ActionButtons v={v} />
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
                         </div>
-                        {v.note ? (
-                          <div className="text-xs text-text-muted truncate mt-0.5">{v.note}</div>
-                        ) : null}
-                        <div className="flex items-center justify-between text-xs text-text-secondary mt-1">
-                          <span>{v.profile_name}</span>
-                          <PriceCell v={v} align="right" />
-                        </div>
-                        <div className="flex items-center justify-between mt-2">
-                          <span className="font-mono text-[11px] text-text-muted">
-                            {v.uptime ? "up " + v.uptime : "-"}
-                          </span>
-                          <ActionButtons v={v} />
+
+                        {/* Mobile card list */}
+                        <div className="md:hidden divide-y divide-line">
+                          {g.items.map((v) => (
+                            <div key={v.id} className="px-4 py-3">
+                              <div className="flex items-start gap-3">
+                                <button onClick={() => toggleSelect(v.id)} className="mt-0.5 flex-shrink-0">
+                                  {selected.includes(v.id) ? (
+                                    <CheckSquare className="w-4 h-4 text-signal-dark" />
+                                  ) : (
+                                    <Square className="w-4 h-4 text-text-muted" />
+                                  )}
+                                </button>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="font-mono font-medium text-text-primary text-sm truncate">
+                                      {v.username}
+                                    </span>
+                                    <span
+                                      className={
+                                        "flex-shrink-0 px-2 py-0.5 rounded-full text-[11px] font-medium " +
+                                        (statusClass[v.status] || "bg-paper text-text-secondary")
+                                      }
+                                    >
+                                      {statusLabel[v.status] || v.status}
+                                    </span>
+                                  </div>
+                                  {v.note ? (
+                                    <div className="text-xs text-text-muted truncate mt-0.5">{v.note}</div>
+                                  ) : null}
+                                  <div className="flex items-center justify-end text-xs text-text-secondary mt-1">
+                                    <PriceCell v={v} align="right" />
+                                  </div>
+                                  <div className="flex items-center justify-between mt-2">
+                                    <span className="font-mono text-[11px] text-text-muted">
+                                      {v.uptime ? "up " + v.uptime : "-"}
+                                    </span>
+                                    <ActionButtons v={v} />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     </div>
                   </div>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
     </div>
   )
 }

@@ -13,6 +13,8 @@ export type AppSettings = {
   voucherTemplate: VoucherTemplate
   logoUrl: string | null
   logoSize: number
+  // Geser manual logo (px, negatif = ke kiri). Hanya dipakai template Klasik.
+  logoOffsetX: number
 }
 
 // Dipakai sebagai fallback kalau baris settings belum ada di database,
@@ -34,6 +36,7 @@ export const defaultSettings: AppSettings = {
   voucherTemplate: "klasik",
   logoUrl: null,
   logoSize: 100,
+  logoOffsetX: 0,
 }
 
 // Cari harga untuk sebuah profile. Exact match dulu, kalau tidak ada

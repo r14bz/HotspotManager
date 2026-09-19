@@ -67,6 +67,7 @@ export default function PrintPage() {
                 waNumber={settings.waNumber}
                 logoUrl={settings.logoUrl}
                 logoSize={settings.logoSize}
+                logoOffsetX={settings.logoOffsetX}
                 template={settings.voucherTemplate}
               />
             ))

@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
 
     const { data, error } = await supabase
       .from("app_settings")
-      .select("brand_name, wa_number, wifi_name, prices, voucher_template, logo_url, logo_size")
+      .select("*")
       .eq("router_id", routerId)
       .maybeSingle()
 
@@ -41,6 +41,9 @@ export async function GET(req: NextRequest) {
         : defaultSettings.voucherTemplate,
       logoUrl: data.logo_url || null,
       logoSize: data.logo_size || defaultSettings.logoSize,
+      logoOffsetX: Number.isFinite(Number(data.logo_offset_x))
+        ? Number(data.logo_offset_x)
+        : defaultSettings.logoOffsetX,
     }
 
     return NextResponse.json({ success: true, data: settings })
@@ -71,6 +74,10 @@ export async function POST(req: NextRequest) {
       : defaultSettings.voucherTemplate
     const logoUrl = body.logoUrl ? String(body.logoUrl).trim() : null
     const logoSize = Number(body.logoSize) || defaultSettings.logoSize
+    const logoOffsetX = Math.max(
+      -60,
+      Math.min(60, Math.round(Number(body.logoOffsetX) || 0))
+    )
 
     const supabase = await createClient()
 
@@ -84,6 +91,7 @@ export async function POST(req: NextRequest) {
         voucher_template: voucherTemplate,
         logo_url: logoUrl,
         logo_size: logoSize,
+        logo_offset_x: logoOffsetX,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "router_id" }
