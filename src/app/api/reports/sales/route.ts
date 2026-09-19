@@ -1,6 +1,30 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 
+// Semua batas bulan & pengelompokan tanggal memakai WIB (UTC+7), sama
+// dengan import Mikhmon. Sebelumnya memakai UTC, sehingga voucher yang
+// terpakai pukul 00:00-07:00 WIB masuk ke hari/bulan sebelumnya.
+const WIB_OFFSET_MS = 7 * 60 * 60 * 1000
+const PAGE_SIZE = 1000
+const MAX_PAGES = 20 // batas pengaman: 20.000 baris
+
+const pad = (n: number) => String(n).padStart(2, "0")
+
+function wibDate(iso: string): string {
+  return new Date(new Date(iso).getTime() + WIB_OFFSET_MS).toISOString().slice(0, 10)
+}
+
+type Row = {
+  id: string
+  username: string
+  profile_name: string | null
+  price: number | null
+  status: string | null
+  created_at: string | null
+  sold_at: string | null
+  used_at: string | null
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
@@ -14,51 +38,66 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    // Validasi format YYYY-MM
-    if (month && !/^\d{4}-\d{2}$/.test(month)) {
-      month = null
+    // Validasi format YYYY-MM dan rentang bulan 01-12
+    if (month) {
+      const mm = Number(month.slice(5, 7))
+      if (!/^\d{4}-\d{2}$/.test(month) || mm < 1 || mm > 12) month = null
     }
 
-    // Default: bulan ini
+    // Default: bulan ini menurut WIB
     if (!month) {
-      const now = new Date()
-      const y = now.getFullYear()
-      const m = String(now.getMonth() + 1).padStart(2, "0")
-      month = `${y}-${m}`
+      const nowWib = new Date(Date.now() + WIB_OFFSET_MS)
+      month = `${nowWib.getUTCFullYear()}-${pad(nowWib.getUTCMonth() + 1)}`
     }
 
-    const start = `${month}-01T00:00:00.000Z`
-
-    // Hitung akhir bulan
     const [yearStr, monthStr] = month.split("-")
     const year = Number(yearStr)
     const mon = Number(monthStr)
-    const endDate = new Date(Date.UTC(year, mon, 1)) // bulan berikutnya
+    const nextYear = mon === 12 ? year + 1 : year
+    const nextMon = mon === 12 ? 1 : mon + 1
+
+    // Awal & akhir bulan dalam WIB, dikonversi ke ISO UTC untuk query.
+    const startDate = new Date(`${month}-01T00:00:00+07:00`)
+    const endDate = new Date(`${nextYear}-${pad(nextMon)}-01T00:00:00+07:00`)
+    const start = startDate.toISOString()
     const end = endDate.toISOString()
 
     const supabase = await createClient()
 
-    const { data, error } = await supabase
-      .from("vouchers")
-      .select("id, username, profile_name, price, status, created_at, sold_at, used_at")
-      .eq("router_id", routerId)
-      .or(
-        `and(created_at.gte.${start},created_at.lt.${end}),` +
-          `and(used_at.gte.${start},used_at.lt.${end})`
-      )
-      .order("created_at", { ascending: false })
-      .limit(1000)
+    // Ambil semua halaman (Supabase membatasi 1000 baris per query).
+    const vouchers: Row[] = []
+    let truncated = false
 
-    if (error) {
-      return NextResponse.json(
-        { success: false, message: error.message },
-        { status: 500 }
-      )
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const from = page * PAGE_SIZE
+      const { data, error } = await supabase
+        .from("vouchers")
+        .select("id, username, profile_name, price, status, created_at, sold_at, used_at")
+        .eq("router_id", routerId)
+        .or(
+          `and(created_at.gte.${start},created_at.lt.${end}),` +
+            `and(used_at.gte.${start},used_at.lt.${end})`
+        )
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+
+      if (error) {
+        return NextResponse.json(
+          { success: false, message: error.message },
+          { status: 500 }
+        )
+      }
+
+      const rows = (data || []) as Row[]
+      vouchers.push(...rows)
+
+      if (rows.length < PAGE_SIZE) break
+      if (page === MAX_PAGES - 1) truncated = true
     }
 
-    const vouchers = data || []
-    const startTime = new Date(start).getTime()
-    const endTime = new Date(end).getTime()
+    const startTime = startDate.getTime()
+    const endTime = endDate.getTime()
 
     const inRange = (iso: string | null | undefined) => {
       if (!iso) return false
@@ -66,11 +105,10 @@ export async function GET(req: NextRequest) {
       return t >= startTime && t < endTime
     }
 
-    const isUsedFlag = (v: (typeof vouchers)[number]) =>
+    const isUsedFlag = (v: Row) =>
       v.status === "used" || v.status === "online" || !!v.sold_at || !!v.used_at
 
-    const usedDateOf = (v: (typeof vouchers)[number]) =>
-      v.used_at || v.sold_at || v.created_at
+    const usedDateOf = (v: Row) => v.used_at || v.sold_at || v.created_at
 
     // "Generate" dihitung dari tanggal voucher DIBUAT dalam bulan ini.
     const generatedThisMonth = vouchers.filter((v) => inRange(v.created_at))
@@ -117,14 +155,11 @@ export async function GET(req: NextRequest) {
       }
     > = {}
 
-    // Dikelompokkan berdasarkan tanggal voucher BENAR-BENAR terpakai/terjual
-    // (used_at / sold_at), bukan tanggal voucher dibuat (created_at) —
-    // supaya voucher yang di-generate massal lalu dipakai belakangan
-    // tercatat pendapatannya di hari dia laku, bukan di hari generate.
+    // Dikelompokkan per tanggal WIB voucher BENAR-BENAR terpakai/terjual.
     usedThisMonth.forEach((v) => {
       const rawUsedAt = usedDateOf(v)
-      const date = (rawUsedAt || "").split("T")[0]
-      if (!date) return
+      if (!rawUsedAt) return
+      const date = wibDate(rawUsedAt)
 
       if (!byDate[date]) byDate[date] = { count: 0, revenue: 0, items: [] }
       byDate[date].count += 1
@@ -133,13 +168,14 @@ export async function GET(req: NextRequest) {
         username: v.username,
         profile_name: v.profile_name || "-",
         price: Number(v.price) || 0,
-        used_at: rawUsedAt || null,
+        used_at: rawUsedAt,
       })
     })
 
     return NextResponse.json({
       success: true,
       month,
+      truncated,
       summary: {
         totalGenerated,
         totalUsed,

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 
+// Edit harga per voucher = PENGECUALIAN KHUSUS. Harga ini ditandai
+// price_override = true supaya sync tidak menimpanya dengan harga profile.
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -33,7 +35,7 @@ export async function POST(req: NextRequest) {
 
     const { error } = await supabase
       .from("vouchers")
-      .update({ price })
+      .update({ price, price_override: true })
       .eq("router_id", routerId)
       .eq("username", username)
 

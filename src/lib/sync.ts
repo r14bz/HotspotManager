@@ -2,8 +2,46 @@ import { createClient } from "@/lib/supabase/server"
 import { withMikrotik } from "@/lib/mikrotik"
 import { defaultSettings, resolvePrice } from "@/lib/settings"
 
+// Ukuran potongan untuk query .in() dan upsert. Sebelumnya semua username
+// dikirim sekaligus: URL bisa kepanjangan dan hasil terpotong 1000 baris,
+// sehingga data lama dianggap kosong dan used_at ikut ter-reset.
+const IN_CHUNK = 200
+const UPSERT_CHUNK = 500
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
+  return out
+}
+
+// Format uptime RouterOS ("1w2d3h4m5s") -> detik.
+function parseUptimeSeconds(uptime: string): number {
+  if (!uptime) return 0
+  const units: Record<string, number> = { w: 604800, d: 86400, h: 3600, m: 60, s: 1 }
+  let total = 0
+  for (const m of uptime.matchAll(/(\d+)([wdhms])/g)) {
+    total += Number(m[1]) * units[m[2]]
+  }
+  return total
+}
+
+type ExistingRow = {
+  username: string
+  status: string | null
+  used_at: string | null
+  price: number | null
+  note: string | null
+  price_override: boolean | null
+  created_at: string | null
+}
+
 // Sync satu router tertentu. Dipakai oleh /api/mikrotik/vouchers (browser,
 // untuk router yang sedang aktif dipilih) dan /api/cron/sync (loop semua router).
+//
+// ATURAN HARGA:
+// 1. Voucher belum terpakai  -> selalu mengikuti harga profile di Pengaturan.
+// 2. Voucher sudah terpakai  -> mempertahankan harga saat terjual.
+// 3. price_override = true   -> harga manual, tidak pernah ditimpa sync.
 export async function syncVouchersFromMikrotik(routerId: string) {
   const { users, active } = await withMikrotik(routerId, async (conn) => {
     const [users, active] = await Promise.all([
@@ -32,30 +70,37 @@ export async function syncVouchersFromMikrotik(routerId: string) {
     // pakai default
   }
 
-  // Ambil data yang sudah tercatat di Supabase LEBIH DULU (termasuk note),
-  // supaya bisa dilampirkan ke tiap voucher di respons DAN dipertahankan
-  // (tidak ketimpa) saat upsert nanti.
-  const usernamesFromMikrotik = (users || []).map((u: any) => u.name).filter(Boolean)
-  const existingByUsername = new Map<
-    string,
-    { status: string | null; used_at: string | null; price: number | null; note: string | null }
-  >()
+  // Ambil data yang sudah tercatat di Supabase LEBIH DULU, per potongan.
+  // Kalau ada potongan yang gagal, existingOk = false dan upsert DILEWATI
+  // (lebih baik tidak menyimpan daripada menimpa used_at / harga dengan
+  // nilai keliru karena data lama tidak terbaca).
+  const usernamesFromMikrotik: string[] = Array.from(
+    new Set<string>((users || []).map((u: any) => u.name).filter(Boolean))
+  )
+  const existingByUsername = new Map<string, ExistingRow>()
+  let existingOk = true
 
-  if (usernamesFromMikrotik.length > 0) {
+  for (const part of chunk(usernamesFromMikrotik, IN_CHUNK)) {
     try {
-      const { data: existing } = await supabase
+      const { data, error } = await supabase
         .from("vouchers")
-        .select("username, status, used_at, price, note")
+        .select("username, status, used_at, price, note, price_override, created_at")
         .eq("router_id", routerId)
-        .in("username", usernamesFromMikrotik)
+        .in("username", part)
 
-      for (const row of existing || []) {
+      if (error) throw error
+      for (const row of (data || []) as ExistingRow[]) {
         existingByUsername.set(row.username, row)
       }
-    } catch {
-      // lanjut tanpa data existing
+    } catch (e) {
+      console.error("Sync: gagal membaca data existing:", e)
+      existingOk = false
+      break
     }
   }
+
+  const nowMs = Date.now()
+  const payloads: Record<string, any>[] = []
 
   const list = (users || []).map((u: any) => {
     const username = u.name || ""
@@ -74,17 +119,59 @@ export async function syncVouchersFromMikrotik(routerId: string) {
     else if (isOnline) status = "online"
     else if (hasUptime || hasTraffic) status = "used"
 
+    const existing = existingByUsername.get(username)
+    const wasAlreadyUsed =
+      existing?.status === "used" || existing?.status === "online" || !!existing?.used_at
+    const isUsedNow = status === "used" || status === "online"
+
+    // --- Harga ---
+    let price: number
+    if (existing?.price_override && existing.price != null) {
+      price = existing.price
+    } else if (wasAlreadyUsed && existing?.price != null) {
+      price = existing.price
+    } else {
+      price = resolvePrice(profileName, prices)
+    }
+
+    // --- used_at ---
+    // Pertama kali terdeteksi terpakai: MikroTik tidak menyimpan waktu
+    // login pertama, jadi diperkirakan dari (sekarang - uptime). Ini jauh
+    // lebih dekat ke waktu pemakaian sebenarnya dibanding "waktu sync".
+    // Tidak boleh lebih awal dari waktu voucher dibuat.
+    let usedAt: string | null = existing?.used_at ?? null
+    if (isUsedNow && !wasAlreadyUsed) {
+      let estimated = nowMs - parseUptimeSeconds(uptime) * 1000
+      const createdMs = existing?.created_at ? new Date(existing.created_at).getTime() : NaN
+      if (Number.isFinite(createdMs) && estimated < createdMs) estimated = createdMs
+      usedAt = new Date(estimated).toISOString()
+    }
+
+    payloads.push({
+      router_id: routerId,
+      username,
+      password: u.password || username,
+      profile_name: profileName,
+      price,
+      limit_uptime: u["limit-uptime"] || "",
+      status: status === "online" ? "used" : status,
+      comment: u.comment || "",
+      // note & price_override sengaja TIDAK disertakan supaya tidak
+      // menimpa nilai yang sudah ada.
+      used_at: usedAt,
+    })
+
     return {
       id: u[".id"],
       username,
       password: u.password || username,
       profile_name: profileName,
-      price: resolvePrice(profileName, prices),
+      price,
       limit_uptime: u["limit-uptime"] || "",
       uptime,
       disabled,
       comment: u.comment || "",
-      note: existingByUsername.get(username)?.note ?? null,
+      note: existing?.note ?? null,
       status,
       bytesIn,
       bytesOut,
@@ -92,43 +179,20 @@ export async function syncVouchersFromMikrotik(routerId: string) {
   })
 
   let synced = false
-  try {
-    const payloads = list.map((v) => {
-      const existing = existingByUsername.get(v.username)
-      const wasAlreadyUsed =
-        existing?.status === "used" || existing?.status === "online" || !!existing?.used_at
-      const isUsedNow = v.status === "used" || v.status === "online"
-
-      return {
-        router_id: routerId,
-        username: v.username,
-        password: v.password,
-        profile_name: v.profile_name,
-        price: existing?.price ?? v.price,
-        limit_uptime: v.limit_uptime,
-        status: v.status === "online" ? "used" : v.status,
-        comment: v.comment,
-        // note TIDAK disertakan di sini supaya tidak menimpa nilai yang
-        // sudah ada — kolom ini cuma pernah diisi manual saat generate,
-        // sync tidak pernah mengubahnya.
-        used_at:
-          isUsedNow && !wasAlreadyUsed
-            ? new Date().toISOString()
-            : existing?.used_at ?? null,
+  if (!existingOk) {
+    console.error("Sync Supabase dilewati: data existing tidak terbaca penuh")
+  } else {
+    try {
+      for (const part of chunk(payloads, UPSERT_CHUNK)) {
+        const { error } = await supabase
+          .from("vouchers")
+          .upsert(part, { onConflict: "router_id,username" })
+        if (error) throw error
       }
-    })
-
-    if (payloads.length > 0) {
-      const { error } = await supabase
-        .from("vouchers")
-        .upsert(payloads, { onConflict: "router_id,username" })
-
-      if (error) throw error
+      synced = true
+    } catch (e) {
+      console.error("Sync Supabase failed:", e)
     }
-
-    synced = true
-  } catch (e) {
-    console.error("Sync Supabase failed:", e)
   }
 
   return { count: list.length, data: list, synced }
