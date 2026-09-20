@@ -10,7 +10,8 @@ const PUBLIC_API = new Set([
   "/api/cron/sync",
 ])
 
-export async function middleware(req: NextRequest) {
+// Next.js 16: konvensi file "middleware" diganti "proxy" (file & nama fungsi).
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl
 
   const isApi = pathname.startsWith("/api/")

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   RefreshCw,
   Loader2,
@@ -19,32 +19,66 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchData = async () => {
+  // Sudah pernah menerima data "full" (info statis + log) untuk router ini?
+  const hasFull = useRef(false)
+  // Cegah dua permintaan menumpuk kalau router sedang lambat menjawab.
+  const inFlight = useRef(false)
+
+  // full = true: ikut mengambil info statis + log (lebih berat untuk router).
+  // Polling otomatis memakai mode ringan; data lama (identity, log, dst)
+  // dipertahankan dan hanya bagian yang berubah yang diperbarui.
+  const fetchData = async (full = false) => {
     if (!activeRouterId) return
+    if (inFlight.current) return
+    inFlight.current = true
+
+    const needFull = full || !hasFull.current
     setLoading(true)
     setError(null)
 
     try {
-      const res = await fetch(`/api/mikrotik/dashboard?router_id=${activeRouterId}`)
+      const res = await fetch(
+        `/api/mikrotik/dashboard?router_id=${activeRouterId}${needFull ? "&full=1" : ""}`
+      )
       const json = await res.json()
 
       if (json.success) {
-        setData(json.data)
+        if (needFull) hasFull.current = true
+        setData((prev: any) => (needFull || !prev ? json.data : { ...prev, ...json.data }))
       } else {
         setError(json.message || "Gagal mengambil data")
       }
     } catch (err: any) {
       setError(err.message || "Terjadi kesalahan")
     } finally {
+      inFlight.current = false
       setLoading(false)
     }
   }
 
   useEffect(() => {
     setData(null)
-    fetchData()
-    const interval = setInterval(fetchData, 30000)
-    return () => clearInterval(interval)
+    hasFull.current = false
+    inFlight.current = false
+    fetchData(true)
+
+    // Polling tiap 60 dtk, dan dilewati saat tab tidak terlihat supaya
+    // router tidak terus ditanyai ketika halaman tidak dilihat siapa pun.
+    const interval = setInterval(() => {
+      if (document.hidden) return
+      fetchData(false)
+    }, 60000)
+
+    // Begitu tab terlihat lagi, segarkan sekali.
+    const onVisible = () => {
+      if (!document.hidden) fetchData(false)
+    }
+    document.addEventListener("visibilitychange", onVisible)
+
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener("visibilitychange", onVisible)
+    }
   }, [activeRouterId])
 
   if (loading && !data) {
@@ -76,7 +110,7 @@ export default function DashboardPage() {
           )}
         </div>
         <button
-          onClick={fetchData}
+          onClick={() => fetchData(true)}
           disabled={loading}
           className="flex items-center gap-1.5 bg-surface border border-line hover:border-signal/40 disabled:opacity-60 text-text-primary px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex-shrink-0"
         >

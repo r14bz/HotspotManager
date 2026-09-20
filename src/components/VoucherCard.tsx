@@ -61,6 +61,68 @@ const PRINT_COLOR_ADJUST = {
   printColorAdjust: "exact" as const,
 }
 
+type VoucherBrandProps = {
+  logoUrl?: string | null
+  brandName: string
+  scale: number
+  logoPad: { left: number; height: number } | null
+  logoOffsetX: number
+  baseHeight: number
+  textSize: string
+  textColor: string
+  align?: "left" | "center"
+}
+
+// PENTING: komponen ini SENGAJA didefinisikan di LUAR VoucherCard. Kalau
+// didefinisikan di dalam, React menganggapnya tipe komponen baru di setiap
+// render dan memasang ulang <img> logo tiap kali (mis. saat slider ukuran
+// digeser), sehingga logo berkedip.
+//
+// Skala logo pakai CSS transform, BUKAN mengubah height asli gambar. Kalau
+// height gambar langsung diubah, box logo ikut membesar dan bisa mendorong
+// lebar kartu (flex item tanpa batas lebar akan "memaksa" parent-nya ikut
+// melebar). transform:scale murni visual, tidak pernah mengubah ukuran
+// tata letak kartu.
+function VoucherBrand({
+  logoUrl,
+  brandName,
+  scale,
+  logoPad,
+  logoOffsetX,
+  baseHeight,
+  textSize,
+  textColor,
+  align = "left",
+}: VoucherBrandProps) {
+  if (!logoUrl) {
+    return <div style={{ fontWeight: "bold", fontSize: textSize, color: textColor }}>{brandName}</div>
+  }
+
+  return (
+    <img
+      src={logoUrl}
+      alt={brandName}
+      style={{
+        height: `${baseHeight}px`,
+        display: "block",
+        transform: `scale(${scale})`,
+        transformOrigin: align === "center" ? "center" : "left center",
+        // Rata kiri: tarik logo ke kiri sebesar padding transparannya
+        // (sudah dikali skala) supaya sejajar dengan teks di bawahnya.
+        // Ditambah geser manual dari Pengaturan (logoOffsetX, px).
+        marginLeft:
+          align === "left"
+            ? `${
+                (logoPad
+                  ? -(logoPad.left * (baseHeight / logoPad.height) * scale)
+                  : 0) + (logoOffsetX || 0)
+              }px`
+            : undefined,
+      }}
+    />
+  )
+}
+
 export default function VoucherCard({
   voucher,
   brandName,
@@ -142,47 +204,7 @@ export default function VoucherCard({
     })
   const priceLabel = "Rp" + (voucher.price || 0).toLocaleString("id-ID")
 
-  // PENTING: skala logo pakai CSS transform, BUKAN mengubah height asli
-  // gambar. Kalau height gambar langsung diubah, box logo ikut membesar
-  // dan bisa mendorong lebar kartu (flex item tanpa batas lebar akan
-  // "memaksa" parent-nya ikut melebar). transform:scale murni visual,
-  // tidak pernah mengubah ukuran tata letak kartu.
-  const Brand = ({
-    baseHeight,
-    textSize,
-    textColor,
-    align = "left",
-  }: {
-    baseHeight: number
-    textSize: string
-    textColor: string
-    align?: "left" | "center"
-  }) =>
-    logoUrl ? (
-      <img
-        src={logoUrl}
-        alt={brandName}
-        style={{
-          height: `${baseHeight}px`,
-          display: "block",
-          transform: `scale(${scale})`,
-          transformOrigin: align === "center" ? "center" : "left center",
-          // Rata kiri: tarik logo ke kiri sebesar padding transparannya
-          // (sudah dikali skala) supaya sejajar dengan teks di bawahnya.
-          // Ditambah geser manual dari Pengaturan (logoOffsetX, px).
-          marginLeft:
-            align === "left"
-              ? `${
-                  (logoPad
-                    ? -(logoPad.left * (baseHeight / logoPad.height) * scale)
-                    : 0) + (logoOffsetX || 0)
-                }px`
-              : undefined,
-        }}
-      />
-    ) : (
-      <div style={{ fontWeight: "bold", fontSize: textSize, color: textColor }}>{brandName}</div>
-    )
+  const brandProps = { logoUrl, brandName, scale, logoPad, logoOffsetX }
 
   // ============ TEMPLATE: TIKET ============
   if (template === "tiket") {
@@ -203,7 +225,7 @@ export default function VoucherCard({
       >
         <div style={{ flex: 1, padding: "10px 12px", textAlign: "center" }}>
           <div style={{ marginBottom: "6px", display: "flex", justifyContent: "center" }}>
-            <Brand baseHeight={14} textSize="11px" textColor="#15803D" align="center" />
+            <VoucherBrand {...brandProps} baseHeight={14} textSize="11px" textColor="#15803D" align="center" />
           </div>
           <div
             style={{
@@ -329,7 +351,7 @@ export default function VoucherCard({
                 }px`,
               }}
             >
-              <Brand baseHeight={14} textSize="11px" textColor="#15803D" />
+              <VoucherBrand {...brandProps} baseHeight={14} textSize="11px" textColor="#15803D" />
             </div>
             <div style={{ fontSize: "7px", color: "#888", letterSpacing: "0.5px", marginBottom: "2px" }}>
               KODE VOUCHER
@@ -420,7 +442,7 @@ export default function VoucherCard({
 
       <div style={{ flex: 1, padding: "8px 10px" }}>
         <div style={{ marginBottom: "5px" }}>
-          <Brand baseHeight={18} textSize="12px" textColor="#15803D" />
+          <VoucherBrand {...brandProps} baseHeight={18} textSize="12px" textColor="#15803D" />
         </div>
 
         <div style={{ fontSize: "7px", color: "#888", letterSpacing: "0.5px" }}>

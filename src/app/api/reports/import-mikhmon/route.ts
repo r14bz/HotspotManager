@@ -32,6 +32,72 @@ function parseMikhmonDate(dateStr: string, timeStr: string) {
   return d.toISOString()
 }
 
+// Parser CSV yang mengenali tanda kutip. Sebelumnya baris dipecah dengan
+// split(","), sehingga komentar yang berisi koma (mis. "Titip jual, Bu Siti")
+// menggeser semua kolom sesudahnya dan harga terbaca salah / baris terlewat.
+// - pemisah di dalam "..." bukan pemisah kolom
+// - "" di dalam kutip = satu tanda kutip
+// - kutip hanya dianggap pembuka kalau muncul di awal kolom
+function parseCsv(text: string, delimiter: string): string[][] {
+  const rows: string[][] = []
+  let row: string[] = []
+  let field = ""
+  let inQuotes = false
+
+  const pushRow = () => {
+    row.push(field)
+    field = ""
+    if (row.some((c) => c.trim() !== "")) rows.push(row)
+    row = []
+  }
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          field += '"'
+          i++
+        } else {
+          inQuotes = false
+        }
+      } else {
+        field += ch
+      }
+    } else if (ch === '"' && field === "") {
+      inQuotes = true
+    } else if (ch === delimiter) {
+      row.push(field)
+      field = ""
+    } else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && text[i + 1] === "\n") i++
+      pushRow()
+    } else {
+      field += ch
+    }
+  }
+  pushRow()
+
+  return rows
+}
+
+// Beberapa versi/locale mengekspor CSV dengan titik-koma. Tentukan pemisah
+// dari baris header (yang memuat "username" dan "profile").
+function detectDelimiter(text: string): string {
+  const allLines = text.split(/\r?\n/)
+  const header =
+    allLines.slice(0, 15).find((l) => {
+      const lower = l.toLowerCase()
+      return lower.includes("username") && lower.includes("profile")
+    }) ??
+    allLines.find((l) => l.trim()) ??
+    ""
+  const semi = (header.match(/;/g) || []).length
+  const comma = (header.match(/,/g) || []).length
+  return semi > comma ? ";" : ","
+}
+
 export async function POST(req: NextRequest) {
   try {
     const form = await req.formData()
@@ -52,12 +118,12 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const text = await file.text()
-    const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0)
+    const text = (await file.text()).replace(/^\uFEFF/, "")
+    const table = parseCsv(text, detectDelimiter(text))
 
     let startIndex = 0
-    for (let i = 0; i < Math.min(lines.length, 15); i++) {
-      const lower = lines[i].toLowerCase()
+    for (let i = 0; i < Math.min(table.length, 15); i++) {
+      const lower = table[i].join(",").toLowerCase()
       if (lower.includes("username") && lower.includes("profile")) {
         startIndex = i + 1
         break
@@ -67,11 +133,8 @@ export async function POST(req: NextRequest) {
     const rows: any[] = []
     const errors: string[] = []
 
-    for (let i = startIndex; i < lines.length; i++) {
-      const line = lines[i].trim()
-      if (!line) continue
-
-      const cols = line.split(",")
+    for (let i = startIndex; i < table.length; i++) {
+      const cols = table[i]
       if (cols.length < 7) continue
 
       const dateStr = (cols[1] || "").trim()

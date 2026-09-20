@@ -10,24 +10,51 @@ export async function GET(req: NextRequest) {
     )
   }
 
+  // Mode ringan (default): hanya data yang berubah-ubah (resource, user
+  // aktif, traffic). Mode ?full=1: ditambah data statis (identity, model,
+  // serial, firmware) dan LOG. /log/print mengembalikan seluruh isi log
+  // router dan paling berat untuk router kecil, jadi hanya diminta saat
+  // halaman dibuka / tombol Refresh ditekan, bukan di tiap polling.
+  const full = req.nextUrl.searchParams.get("full") === "1"
+
   try {
-    const [identity, resource, routerboard, activeUsers, interfaces, logs] =
+    const [resource, activeUsers, interfaces, identity, routerboard, logs] =
       await withMikrotik(
         routerId,
         (conn) =>
           Promise.all([
-            conn.write("/system/identity/print"),
             conn.write("/system/resource/print"),
-            conn.write("/system/routerboard/print"),
             conn.write("/ip/hotspot/active/print"),
             conn.write("/interface/print"),
-            conn.write("/log/print"),
+            full ? conn.write("/system/identity/print") : Promise.resolve(null),
+            full ? conn.write("/system/routerboard/print") : Promise.resolve(null),
+            full ? conn.write("/log/print") : Promise.resolve(null),
           ]),
         12
       )
 
     const res = resource?.[0] || {}
     const rb = routerboard?.[0] || {}
+
+    // Hanya ada di mode full. Di mode ringan kunci-kunci ini SENGAJA tidak
+    // dikirim supaya nilai lama di halaman tidak tertimpa default.
+    const fullOnly = full
+      ? {
+          identity: identity?.[0]?.name || "MikroTik",
+          board: res["board-name"] || rb["board-name"] || "-",
+          model: rb.model || res["board-name"] || "-",
+          serial: rb["serial-number"] || "-",
+          firmware: rb["current-firmware"] || "-",
+          logs: (logs || [])
+            .slice(-12)
+            .reverse()
+            .map((log: any) => ({
+              time: log.time || "",
+              topics: log.topics || "",
+              message: log.message || "",
+            })),
+        }
+      : {}
 
     const totalMemory = Number(res["total-memory"] || 0)
     const freeMemory = Number(res["free-memory"] || 0)
@@ -63,12 +90,7 @@ export async function GET(req: NextRequest) {
       success: true,
       data: {
         // System Info
-        identity: identity?.[0]?.name || "MikroTik",
         version: res.version || "-",
-        board: res["board-name"] || rb["board-name"] || "-",
-        model: rb.model || res["board-name"] || "-",
-        serial: rb["serial-number"] || "-",
-        firmware: rb["current-firmware"] || "-",
         architecture: res["architecture-name"] || "-",
         uptime: res.uptime || "-",
         cpu: res["cpu-load"] || "0",
@@ -106,14 +128,7 @@ export async function GET(req: NextRequest) {
           mac: u["mac-address"] || "-",
         })),
 
-        logs: (logs || [])
-          .slice(-12)
-          .reverse()
-          .map((log: any) => ({
-            time: log.time || "",
-            topics: log.topics || "",
-            message: log.message || "",
-          })),
+        ...fullOnly,
       },
     })
   } catch (error: any) {
