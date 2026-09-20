@@ -3,6 +3,7 @@
 import { useEffect, useState, Fragment } from "react"
 import { useActiveRouter } from "@/lib/router-context"
 import AccordionCard from "@/components/AccordionCard"
+import { buildReportXlsx, buildReportCsv, reportFileName } from "@/lib/report-export"
 import {
   BarChart3,
   DollarSign,
@@ -14,6 +15,7 @@ import {
   Download,
   Upload,
   ChevronRight,
+  ChevronDown,
 } from "lucide-react"
 
 function getCurrentMonth() {
@@ -73,7 +75,7 @@ function formatDateLabel(value: string) {
 }
 
 export default function ReportsPage() {
-  const { activeRouterId } = useActiveRouter()
+  const { activeRouterId, activeRouter } = useActiveRouter()
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
@@ -83,6 +85,7 @@ export default function ReportsPage() {
   const [importResult, setImportResult] = useState<string | null>(null)
   const [expandedDate, setExpandedDate] = useState<string | null>(null)
   const [profileCardOpen, setProfileCardOpen] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
 
   const fetchReport = async (m: string) => {
     if (!activeRouterId) return
@@ -115,52 +118,54 @@ export default function ReportsPage() {
   const byProfile = data?.byProfile || {}
   const byDate = data?.byDate || {}
 
-  const handleExportCSV = () => {
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    // Jangan langsung dicabut: sebagian browser HP butuh waktu memulai unduhan.
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+
+  // Excel (.xlsx): laporan tertata (ringkasan, per tanggal, detail voucher).
+  // CSV: satu baris per voucher terjual, kolom bersih untuk diolah sendiri.
+  const handleExport = (kind: "xlsx" | "csv") => {
+    setExportOpen(false)
+
     if (!data) {
       alert("Belum ada data untuk diexport")
       return
     }
 
-    const lines: string[] = []
-    lines.push("Laporan Penjualan Voucher")
-    lines.push("Bulan;" + month)
-    lines.push("")
-    lines.push("Ringkasan")
-    lines.push("Total Generate;" + (summary.totalGenerated || 0))
-    lines.push("Sudah Dipakai;" + (summary.totalUsed || 0))
-    lines.push("Belum Dipakai;" + (summary.totalUnused || 0))
-    lines.push("Pendapatan;" + (summary.totalRevenue || 0))
-    lines.push("")
-    lines.push("Profile;Generate;Dipakai;Pendapatan")
+    const input = {
+      month,
+      routerName: activeRouter?.name,
+      summary,
+      byProfile,
+      byDate,
+    }
 
-    Object.entries(byProfile).forEach(([name, info]: any) => {
-      lines.push(
-        name + ";" + info.count + ";" + info.used + ";" + (info.revenue || 0)
-      )
-    })
-
-    lines.push("")
-    lines.push("Tanggal;Terjual;Pendapatan;Kode Voucher (jam)")
-    Object.entries(byDate)
-      .sort((a, b) => (a[0] < b[0] ? 1 : -1))
-      .forEach(([date, info]: any) => {
-        const codes = (info.items || [])
-          .map((it: any) => {
-            const t = formatTimeLabel(it.used_at)
-            return t ? it.username + " (" + t + ")" : it.username
-          })
-          .join(" | ")
-        lines.push(date + ";" + info.count + ";" + (info.revenue || 0) + ";" + codes)
-      })
-
-    const csv = "\uFEFF" + lines.join("\n")
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = "laporan-voucher-" + month + ".csv"
-    a.click()
-    URL.revokeObjectURL(url)
+    try {
+      if (kind === "xlsx") {
+        const bytes = buildReportXlsx(input)
+        downloadBlob(
+          new Blob([bytes], {
+            type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          }),
+          reportFileName(month, "xlsx")
+        )
+      } else {
+        downloadBlob(
+          new Blob([buildReportCsv(input)], { type: "text/csv;charset=utf-8;" }),
+          reportFileName(month, "csv")
+        )
+      }
+    } catch (err: any) {
+      alert("Gagal membuat file: " + (err?.message || "error"))
+    }
   }
 
   const handleImportMikhmon = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -257,14 +262,52 @@ export default function ReportsPage() {
             <span className="hidden sm:inline">Refresh</span>
           </button>
 
-          <button
-            onClick={handleExportCSV}
-            disabled={!data}
-            className="flex items-center gap-1.5 bg-signal hover:bg-signal-dark disabled:opacity-50 text-signal-on px-3 py-2 rounded-lg text-sm flex-shrink-0"
-          >
-            <Download className="w-4 h-4" />
-            <span className="hidden sm:inline">Export CSV</span>
-          </button>
+          <div className="relative flex-shrink-0">
+            <button
+              onClick={() => setExportOpen((v) => !v)}
+              disabled={!data}
+              aria-haspopup="menu"
+              aria-expanded={exportOpen}
+              className="flex items-center gap-1.5 bg-signal hover:bg-signal-dark disabled:opacity-50 text-signal-on px-3 py-2 rounded-lg text-sm"
+            >
+              <Download className="w-4 h-4" />
+              <span className="hidden sm:inline">Export</span>
+              <ChevronDown className="w-3.5 h-3.5" />
+            </button>
+
+            {exportOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setExportOpen(false)} />
+                <div
+                  role="menu"
+                  className="absolute left-0 top-full mt-1.5 z-20 w-60 bg-surface border border-line rounded-xl shadow-lg overflow-hidden"
+                >
+                  <button
+                    role="menuitem"
+                    onClick={() => handleExport("xlsx")}
+                    className="w-full text-left px-4 py-3 hover:bg-paper border-b border-line"
+                  >
+                    <span className="block text-sm font-medium text-text-primary">
+                      Excel (.xlsx)
+                    </span>
+                    <span className="block text-xs text-text-muted mt-0.5">
+                      Rapi: ringkasan, per tanggal, detail voucher
+                    </span>
+                  </button>
+                  <button
+                    role="menuitem"
+                    onClick={() => handleExport("csv")}
+                    className="w-full text-left px-4 py-3 hover:bg-paper"
+                  >
+                    <span className="block text-sm font-medium text-text-primary">CSV</span>
+                    <span className="block text-xs text-text-muted mt-0.5">
+                      Satu baris per voucher terjual
+                    </span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
 
           <label className="flex items-center gap-1.5 bg-ink hover:bg-ink-soft text-white px-3 py-2 rounded-lg text-sm cursor-pointer flex-shrink-0">
             {importing ? (
