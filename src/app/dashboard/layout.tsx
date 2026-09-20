@@ -67,7 +67,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
       {/* Sidebar — desktop only */}
       <aside className="hidden md:flex md:w-60 md:flex-col md:fixed md:inset-y-0 bg-ink text-white">
         <div className="px-5 py-5 flex items-center gap-3 border-b border-ink-line">
-          <Image src="/logo/mark.png" alt="MAMANAIY.NET" width={36} height={34} />
+          <Image src="/logo/icon-mikrotik.png" alt="MikroTik Hotspot Manager" width={36} height={36} />
           <div>
             <p className="font-semibold text-[15px] leading-tight">MikroTik</p>
             <p className="text-[11px] text-white/45">Hotspot Manager</p>
@@ -115,7 +115,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
           <div className="flex items-center justify-between px-4 md:px-6 py-3.5">
             <div className="flex items-center gap-2.5 md:gap-0">
               <div className="w-7 h-7 flex items-center justify-center md:hidden">
-                <Image src="/logo/mark.png" alt="MAMANAIY.NET" width={26} height={24} />
+                <Image src="/logo/icon-mikrotik.png" alt="MikroTik Hotspot Manager" width={26} height={26} />
               </div>
               <h1 className="text-[15px] font-semibold text-white md:text-text-primary md:text-lg">
                 {current?.name || "Dashboard"}

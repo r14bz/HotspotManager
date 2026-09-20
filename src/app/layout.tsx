@@ -13,16 +13,16 @@ const jetbrainsMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "MAMANAIY Hotspot Manager",
+  title: "MikroTik Hotspot Manager",
   description: "Sistem monitoring dan manajemen voucher hotspot",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Hotspot Manager",
+    title: "MikroTik Hotspot Manager",
   },
   icons: {
-    apple: "/icons/icon-192.png",
+    apple: "/icons/apple-touch-icon.png",
   },
 }
 

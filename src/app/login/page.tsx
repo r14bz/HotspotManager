@@ -61,11 +61,11 @@ function LoginForm() {
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-7">
           <Image
-            src="/logo/logo-white.png"
+            src="/logo/wordmark-mikrotik.png"
             alt="MikroTik Hotspot Manager"
-            width={200}
-            height={96}
-            className="mb-5"
+            width={280}
+            height={52}
+            className="mb-5 h-auto"
             priority
           />
           <p className="text-white/40 text-sm mt-1">Masuk untuk mengelola jaringan</p>
