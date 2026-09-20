@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server"
 import { getMikrotikConnection } from "@/lib/mikrotik"
 import { syncVouchersFromMikrotik } from "@/lib/sync"
 
+export const maxDuration = 60
+
 const IN_CHUNK = 200
 
 function chunk<T>(arr: T[], size: number): T[][] {

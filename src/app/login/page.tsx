@@ -5,10 +5,24 @@ import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import { Loader2, AlertCircle } from "lucide-react"
 
+// Parameter ?next= dikontrol pengunjung, jadi hanya boleh mengarah ke
+// halaman di domain ini (mencegah open redirect, mis. ?next=//evil.com).
+// Dipanggil hanya di event handler (butuh window).
+function safeNext(raw: string | null): string {
+  if (!raw) return "/dashboard"
+  try {
+    const url = new URL(raw, window.location.origin)
+    if (url.origin !== window.location.origin) return "/dashboard"
+    return url.pathname + url.search + url.hash
+  } catch {
+    return "/dashboard"
+  }
+}
+
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const nextUrl = searchParams.get("next") || "/dashboard"
+  const nextParam = searchParams.get("next")
 
   const [username, setUsername] = useState("admin")
   const [password, setPassword] = useState("")
@@ -30,7 +44,7 @@ function LoginForm() {
       const json = await res.json()
 
       if (json.success) {
-        router.push(nextUrl)
+        router.push(safeNext(nextParam))
         router.refresh()
       } else {
         setError(json.message || "Login gagal")

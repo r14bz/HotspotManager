@@ -2,12 +2,22 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getMikrotikConnection } from "@/lib/mikrotik"
 import { getDurationLabel } from "@/lib/duration"
+import { randomInt } from "node:crypto"
 
+// Membuat puluhan user lewat VPN bisa lebih lama dari batas default fungsi
+// serverless; beri ruang secukupnya supaya tidak terpotong di tengah jalan.
+export const runtime = "nodejs"
+export const maxDuration = 60
+
+const MAX_QUANTITY = 50 // sama dengan batas di form Generate
+
+// Kode voucher = kredensial login hotspot, jadi pakai generator acak yang
+// aman secara kriptografi (bukan Math.random yang bisa diprediksi).
 function generateCode(length = 7) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
   let result = ""
   for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length))
+    result += chars.charAt(randomInt(chars.length))
   }
   return result
 }
@@ -29,6 +39,43 @@ export async function POST(req: NextRequest) {
         { success: false, message: "router_id wajib disertakan" },
         { status: 400 }
       )
+    }
+
+    // Validasi di SERVER (batas di form bisa dilewati lewat request langsung).
+    const qty = Math.floor(Number(quantity))
+    if (!Number.isFinite(qty) || qty < 1 || qty > MAX_QUANTITY) {
+      return NextResponse.json(
+        { success: false, message: `Jumlah voucher harus 1-${MAX_QUANTITY}` },
+        { status: 400 }
+      )
+    }
+
+    if (typeof profile !== "string" || profile.length > 64) {
+      return NextResponse.json(
+        { success: false, message: "Profile tidak valid" },
+        { status: 400 }
+      )
+    }
+
+    const cleanPrefix = String(prefix || "").trim()
+    if (!/^[A-Za-z0-9_-]{0,12}$/.test(cleanPrefix)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Prefix hanya boleh huruf, angka, - dan _ (maks. 12 karakter)",
+        },
+        { status: 400 }
+      )
+    }
+
+    if (price !== undefined && price !== null && price !== "") {
+      const p = Number(price)
+      if (!Number.isFinite(p) || p < 0) {
+        return NextResponse.json(
+          { success: false, message: "Harga tidak valid" },
+          { status: 400 }
+        )
+      }
     }
 
     // 1. Wajib connect ke MikroTik
@@ -53,8 +100,8 @@ export async function POST(req: NextRequest) {
     const failed: string[] = []
 
     try {
-      for (let i = 0; i < quantity; i++) {
-        const code = (prefix || "") + generateCode(8)
+      for (let i = 0; i < qty; i++) {
+        const code = cleanPrefix + generateCode(8)
 
         try {
           // Profile di MikroTik sudah mengatur session-timeout dll
@@ -112,7 +159,7 @@ export async function POST(req: NextRequest) {
           router_id,
           profile_name: profile,
           quantity: codes.length,
-          prefix: prefix || null,
+          prefix: cleanPrefix || null,
           price: Number(price) || 0,
         })
         .select()
