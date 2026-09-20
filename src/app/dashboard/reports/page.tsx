@@ -379,6 +379,12 @@ export default function ReportsPage() {
               ))}
             </div>
 
+            {Array.isArray(data.excludedProfiles) && data.excludedProfiles.length > 0 && (
+              <p className="text-xs text-text-muted -mt-1">
+                Tidak dihitung sebagai penjualan: profile {data.excludedProfiles.join(", ")}.
+              </p>
+            )}
+
             <AccordionCard
               title="Berdasarkan Profile"
               subtitle={`${Object.keys(byProfile).length} profile`}

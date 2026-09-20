@@ -10,6 +10,14 @@ const MAX_PAGES = 20 // batas pengaman: 20.000 baris
 
 const pad = (n: number) => String(n).padStart(2, "0")
 
+// Profile yang BUKAN penjualan: akun administrator ("default"), voucher uji
+// coba koneksi ("TRIAL-USER"), dan user tanpa profile ("-"). Semuanya
+// dikecualikan dari SELURUH angka laporan (generate, terpakai, belum
+// dipakai, pendapatan, per profile, per tanggal). Pencocokan tidak
+// membedakan huruf besar/kecil.
+const NON_SALES_PROFILES = ["default", "TRIAL-USER", "-"]
+const NON_SALES_SET = new Set(NON_SALES_PROFILES.map((p) => p.toLowerCase()))
+
 function wibDate(iso: string): string {
   return new Date(new Date(iso).getTime() + WIB_OFFSET_MS).toISOString().slice(0, 10)
 }
@@ -65,7 +73,7 @@ export async function GET(req: NextRequest) {
     const supabase = await createClient()
 
     // Ambil semua halaman (Supabase membatasi 1000 baris per query).
-    const vouchers: Row[] = []
+    const allRows: Row[] = []
     let truncated = false
 
     for (let page = 0; page < MAX_PAGES; page++) {
@@ -90,11 +98,17 @@ export async function GET(req: NextRequest) {
       }
 
       const rows = (data || []) as Row[]
-      vouchers.push(...rows)
+      allRows.push(...rows)
 
       if (rows.length < PAGE_SIZE) break
       if (page === MAX_PAGES - 1) truncated = true
     }
+
+    // Buang profile non-penjualan. Baris tanpa profile (null) TIDAK dibuang,
+    // tetap dihitung sebagai "unknown" seperti sebelumnya.
+    const vouchers = allRows.filter(
+      (v) => !NON_SALES_SET.has((v.profile_name || "").trim().toLowerCase())
+    )
 
     const startTime = startDate.getTime()
     const endTime = endDate.getTime()
@@ -176,6 +190,7 @@ export async function GET(req: NextRequest) {
       success: true,
       month,
       truncated,
+      excludedProfiles: NON_SALES_PROFILES,
       summary: {
         totalGenerated,
         totalUsed,
