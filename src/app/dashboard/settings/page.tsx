@@ -92,7 +92,7 @@ export default function SettingsPage() {
   }
 
   const updatePrice = (profile: string, value: string) => {
-    const num = Number(value) || 0
+    const num = Math.max(0, Number(value) || 0)
     setSettings((prev) => ({
       ...prev,
       prices: {

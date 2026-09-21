@@ -167,6 +167,17 @@ export async function syncVouchersFromMikrotik(routerId: string) {
     const existing = existingByUsername.get(username)
     const wasAlreadyUsed =
       existing?.status === "used" || existing?.status === "online" || !!existing?.used_at
+
+    // Jangan pernah TURUNKAN status voucher yang sudah pernah terpakai
+    // kembali menjadi "unused". Begitu user logout / sesi berakhir,
+    // uptime & bytes di MikroTik kosong sehingga status dihitung ulang
+    // jadi "unused", padahal used_at sudah tercatat — voucher yang sama
+    // akan dihitung DUA KALI di laporan (terpakai DAN belum dipakai) dan
+    // tampil "Belum Dipakai" di halaman Kelola Voucher.
+    if (wasAlreadyUsed && status === "unused") {
+      status = disabled ? "disabled" : "used"
+    }
+
     // Voucher yang di-disable setelah dipakai (status "disabled" tapi ada
     // uptime/traffic) tetap dianggap terpakai, supaya tercatat di laporan.
     const isUsedNow =

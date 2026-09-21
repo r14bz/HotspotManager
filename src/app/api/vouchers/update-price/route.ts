@@ -33,6 +33,35 @@ export async function POST(req: NextRequest) {
 
     const supabase = await createClient()
 
+    // Pastikan voucher benar-benar ada di database. Tanpa cek ini, update
+    // 0 baris tetap dianggap sukses oleh supabase-js sehingga admin melihat
+    // "Harga berhasil diperbarui" padahal tidak terjadi apa-apa (dan sync
+    // berikutnya akan menimpa harga dengan harga profile).
+    const { data: row, error: selErr } = await supabase
+      .from("vouchers")
+      .select("username")
+      .eq("router_id", routerId)
+      .eq("username", username)
+      .maybeSingle()
+
+    if (selErr) {
+      return NextResponse.json(
+        { success: false, message: selErr.message },
+        { status: 500 }
+      )
+    }
+
+    if (!row) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Voucher belum tercatat di database. Muat ulang halaman (Sync) dulu, lalu coba lagi.",
+        },
+        { status: 404 }
+      )
+    }
+
     const { error } = await supabase
       .from("vouchers")
       .update({ price, price_override: true })

@@ -24,7 +24,10 @@ function LoginForm() {
   const searchParams = useSearchParams()
   const nextParam = searchParams.get("next")
 
-  const [username, setUsername] = useState("admin")
+  // Prefill dikosongkan: username asli diambil dari ADMIN_USERNAME di
+  // server (mis. "Admin"), bukan selalu "admin" — prefill yang salah
+  // bikin login default gagal membingungkan.
+  const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")

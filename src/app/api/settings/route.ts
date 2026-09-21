@@ -70,8 +70,16 @@ export async function POST(req: NextRequest) {
     const brandName = String(body.brandName || defaultSettings.brandName)
     const waNumber = String(body.waNumber || defaultSettings.waNumber)
     const wifiName = String(body.wifiName || defaultSettings.wifiName)
-    const prices =
-      body.prices && typeof body.prices === "object" ? body.prices : defaultSettings.prices
+    // Harga dipaksa angka (>= 0). Input string/negatif dari form tidak
+    // boleh masuk database — kalau dibiarkan, harga aneh ikut dipakai
+    // sync dan membuat pendapatan laporan jadi negatif/error.
+    const prices: Record<string, number> = {}
+    if (body.prices && typeof body.prices === "object") {
+      for (const [key, val] of Object.entries(body.prices as Record<string, unknown>)) {
+        const n = Number(val)
+        if (Number.isFinite(n) && n >= 0 && key.trim()) prices[String(key).trim()] = n
+      }
+    }
     const voucherTemplate = VALID_TEMPLATES.includes(body.voucherTemplate)
       ? body.voucherTemplate
       : defaultSettings.voucherTemplate
