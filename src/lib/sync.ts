@@ -263,21 +263,34 @@ export async function syncVouchersFromMikrotik(routerId: string) {
 // dipilih di browser" karena cron jalan tanpa ada yang buka app).
 export async function syncAllRouters() {
   const supabase = await createClient()
-  const { data: routers } = await supabase.from("routers").select("id, name")
+  const { data: routers, error } = await supabase.from("routers").select("id, name")
+  if (error) throw error
 
-  const results = []
-  for (const router of routers || []) {
-    try {
-      const result = await syncVouchersFromMikrotik(router.id)
-      results.push({ routerId: router.id, name: router.name, ...result })
-    } catch (e: any) {
-      results.push({
-        routerId: router.id,
-        name: router.name,
-        synced: false,
-        error: e?.message || "gagal sync",
+  // Tiap router punya koneksi & data sendiri, jadi disinkronkan BERBARENGAN
+  // (maks. CONCURRENCY sekaligus) — sebelumnya satu per satu sehingga waktunya
+  // menumpuk dan mendekati batas waktu tunggu cron.
+  const CONCURRENCY = 3
+  const list = routers || []
+  const results: any[] = []
+
+  for (let i = 0; i < list.length; i += CONCURRENCY) {
+    const batch = list.slice(i, i + CONCURRENCY)
+    const done = await Promise.all(
+      batch.map(async (router) => {
+        try {
+          const result = await syncVouchersFromMikrotik(router.id)
+          return { routerId: router.id, name: router.name, ...result }
+        } catch (e: any) {
+          return {
+            routerId: router.id,
+            name: router.name,
+            synced: false,
+            error: e?.message || "gagal sync",
+          }
+        }
       })
-    }
+    )
+    results.push(...done)
   }
   return results
 }
