@@ -104,7 +104,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="px-5 py-4 border-t border-ink-line text-[11px] text-white/35">
-          © 2026 MAMANAIY.NET
+          © 2026 MIKROTIK HOTSPOT MANAGER
         </div>
       </aside>
 

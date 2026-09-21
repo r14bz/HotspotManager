@@ -119,7 +119,7 @@ function LoginForm() {
           </form>
         </div>
 
-        <p className="text-center text-white/25 text-xs mt-6">© 2026 MAMANAIY.NET</p>
+        <p className="text-center text-white/25 text-xs mt-6">© 2026 MIKROTIK HOTSPOT MANAGER</p>
       </div>
     </div>
   )
