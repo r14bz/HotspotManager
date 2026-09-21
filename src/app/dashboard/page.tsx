@@ -10,6 +10,7 @@ import {
   Wifi,
   Users,
   Cpu,
+  ChevronDown,
 } from "lucide-react"
 import { useActiveRouter } from "@/lib/router-context"
 
@@ -18,6 +19,8 @@ export default function DashboardPage() {
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // Log tertutup by default (isinya panjang & jarang dibutuhkan langsung).
+  const [logsOpen, setLogsOpen] = useState(false)
 
   // Sudah pernah menerima data "full" (info statis + log) untuk router ini?
   const hasFull = useRef(false)
@@ -278,57 +281,85 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Logs */}
+          {/* Logs — bisa di-expand/collapse, tertutup by default */}
           <div className="bg-surface rounded-xl border border-line overflow-hidden">
-            <div className="px-4 py-3 border-b border-line">
-              <h3 className="font-semibold text-text-primary text-sm">Log Terbaru</h3>
-            </div>
+            <button
+              type="button"
+              onClick={() => setLogsOpen((v) => !v)}
+              aria-expanded={logsOpen}
+              className="w-full flex items-center justify-between gap-2 px-4 py-3 border-b border-line text-left"
+            >
+              <h3 className="font-semibold text-text-primary text-sm">
+                Log Terbaru
+                {data.logs?.length > 0 && (
+                  <span className="ml-2 text-xs font-normal text-text-muted">
+                    ({data.logs.length})
+                  </span>
+                )}
+              </h3>
+              <ChevronDown
+                className={
+                  "w-4 h-4 text-text-muted flex-shrink-0 transition-transform duration-300 " +
+                  (logsOpen ? "rotate-180" : "")
+                }
+              />
+            </button>
 
-            {/* Desktop table */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead className="bg-paper border-b border-line">
-                  <tr>
-                    <th className="text-left px-4 py-2 font-medium text-text-secondary w-24">Waktu</th>
-                    <th className="text-left px-4 py-2 font-medium text-text-secondary w-28">Topics</th>
-                    <th className="text-left px-4 py-2 font-medium text-text-secondary">Pesan</th>
-                  </tr>
-                </thead>
-                <tbody>
+            {/* Animasi expand/collapse pakai trik CSS grid (0fr -> 1fr), supaya
+                tinggi konten "auto" tetap bisa di-transition mulus tanpa perlu
+                mengukur tinggi lewat JS. */}
+            <div
+              className="grid transition-[grid-template-rows] duration-300 ease-in-out"
+              style={{ gridTemplateRows: logsOpen ? "1fr" : "0fr" }}
+            >
+              <div className="overflow-hidden">
+                {/* Desktop table */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-paper border-b border-line">
+                      <tr>
+                        <th className="text-left px-4 py-2 font-medium text-text-secondary w-24">Waktu</th>
+                        <th className="text-left px-4 py-2 font-medium text-text-secondary w-28">Topics</th>
+                        <th className="text-left px-4 py-2 font-medium text-text-secondary">Pesan</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.logs?.length === 0 ? (
+                        <tr>
+                          <td colSpan={3} className="px-4 py-6 text-center text-text-muted">
+                            Tidak ada log
+                          </td>
+                        </tr>
+                      ) : (
+                        data.logs.map((log: any, i: number) => (
+                          <tr key={i} className="border-b border-line last:border-0 hover:bg-paper/60">
+                            <td className="px-4 py-2 font-mono text-text-muted whitespace-nowrap">{log.time}</td>
+                            <td className="px-4 py-2 font-mono text-signal-dark">{log.topics}</td>
+                            <td className="px-4 py-2 text-text-primary">{log.message}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile card list */}
+                <div className="md:hidden divide-y divide-line">
                   {data.logs?.length === 0 ? (
-                    <tr>
-                      <td colSpan={3} className="px-4 py-6 text-center text-text-muted">
-                        Tidak ada log
-                      </td>
-                    </tr>
+                    <p className="px-4 py-6 text-center text-text-muted text-xs">Tidak ada log</p>
                   ) : (
                     data.logs.map((log: any, i: number) => (
-                      <tr key={i} className="border-b border-line last:border-0 hover:bg-paper/60">
-                        <td className="px-4 py-2 font-mono text-text-muted whitespace-nowrap">{log.time}</td>
-                        <td className="px-4 py-2 font-mono text-signal-dark">{log.topics}</td>
-                        <td className="px-4 py-2 text-text-primary">{log.message}</td>
-                      </tr>
+                      <div key={i} className="px-4 py-2.5 text-xs">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-mono text-signal-dark">{log.topics}</span>
+                          <span className="font-mono text-text-muted">{log.time}</span>
+                        </div>
+                        <p className="text-text-primary">{log.message}</p>
+                      </div>
                     ))
                   )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Mobile card list */}
-            <div className="md:hidden divide-y divide-line">
-              {data.logs?.length === 0 ? (
-                <p className="px-4 py-6 text-center text-text-muted text-xs">Tidak ada log</p>
-              ) : (
-                data.logs.map((log: any, i: number) => (
-                  <div key={i} className="px-4 py-2.5 text-xs">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-mono text-signal-dark">{log.topics}</span>
-                      <span className="font-mono text-text-muted">{log.time}</span>
-                    </div>
-                    <p className="text-text-primary">{log.message}</p>
-                  </div>
-                ))
-              )}
+                </div>
+              </div>
             </div>
           </div>
         </>
