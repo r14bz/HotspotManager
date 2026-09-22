@@ -11,6 +11,10 @@ import {
   User,
   Tag,
   Ticket,
+  Globe,
+  Download,
+  Upload,
+  Eye,
 } from "lucide-react"
 import { defaultSettings, AppSettings, VoucherTemplate } from "@/lib/settings"
 import { useActiveRouter } from "@/lib/router-context"
@@ -39,6 +43,18 @@ export default function SettingsPage() {
   const [pwdLoading, setPwdLoading] = useState(false)
   const [pwdMessage, setPwdMessage] = useState("")
   const [pwdError, setPwdError] = useState("")
+
+  // --- Portal Login Hotspot: lihat/download/upload isi folder via FTP ---
+  const [portalFolder, setPortalFolder] = useState("hotspot")
+  const [portalListing, setPortalListing] = useState<{ entries: any[] } | null>(null)
+  const [portalListLoading, setPortalListLoading] = useState(false)
+  const [portalListError, setPortalListError] = useState("")
+  const [portalDownloading, setPortalDownloading] = useState(false)
+  const [portalDownloadError, setPortalDownloadError] = useState("")
+  const [portalUploadFile, setPortalUploadFile] = useState<File | null>(null)
+  const [portalUploading, setPortalUploading] = useState(false)
+  const [portalUploadResult, setPortalUploadResult] = useState<any>(null)
+  const [portalUploadError, setPortalUploadError] = useState("")
 
   useEffect(() => {
     if (!activeRouterId) return
@@ -147,6 +163,116 @@ export default function SettingsPage() {
       setPwdError(err.message || "Terjadi kesalahan")
     } finally {
       setPwdLoading(false)
+    }
+  }
+
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    // Jangan langsung dicabut: sebagian browser HP butuh waktu memulai unduhan.
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+
+  const handleListPortalFolder = async () => {
+    if (!activeRouterId) return
+    setPortalListLoading(true)
+    setPortalListError("")
+    setPortalListing(null)
+
+    try {
+      const res = await fetch(
+        `/api/mikrotik/hotspot-files/list?router_id=${activeRouterId}&folder=${encodeURIComponent(portalFolder)}`
+      )
+      const json = await res.json()
+      if (json.success) {
+        setPortalListing(json)
+      } else {
+        setPortalListError(json.message || "Gagal membaca folder")
+      }
+    } catch (err: any) {
+      setPortalListError(err.message || "Terjadi kesalahan")
+    } finally {
+      setPortalListLoading(false)
+    }
+  }
+
+  const handleDownloadPortalFolder = async () => {
+    if (!activeRouterId) return
+    setPortalDownloading(true)
+    setPortalDownloadError("")
+
+    try {
+      const res = await fetch(
+        `/api/mikrotik/hotspot-files/download?router_id=${activeRouterId}&folder=${encodeURIComponent(portalFolder)}`
+      )
+      const contentType = res.headers.get("content-type") || ""
+
+      if (!res.ok || contentType.includes("application/json")) {
+        const json = await res.json().catch(() => null)
+        throw new Error(json?.message || "Gagal mendownload folder")
+      }
+
+      const skipped = Number(res.headers.get("x-skipped-files") || 0)
+      const blob = await res.blob()
+      const disposition = res.headers.get("content-disposition") || ""
+      const match = disposition.match(/filename="([^"]+)"/)
+      const filename = match ? match[1] : `${portalFolder}.zip`
+
+      downloadBlob(blob, filename)
+
+      if (skipped > 0) {
+        setPortalDownloadError(
+          `Selesai, tapi ${skipped} file gagal diambil dan tidak ikut masuk ke .zip.`
+        )
+      }
+    } catch (err: any) {
+      setPortalDownloadError(err.message || "Terjadi kesalahan")
+    } finally {
+      setPortalDownloading(false)
+    }
+  }
+
+  const handleUploadPortalFolder = async () => {
+    if (!activeRouterId) return
+    if (!portalUploadFile) {
+      setPortalUploadError("Pilih file .zip dulu")
+      return
+    }
+
+    setPortalUploading(true)
+    setPortalUploadError("")
+    setPortalUploadResult(null)
+
+    try {
+      const form = new FormData()
+      form.append("router_id", activeRouterId)
+      form.append("folder", portalFolder)
+      form.append("file", portalUploadFile)
+
+      const res = await fetch("/api/mikrotik/hotspot-files/upload", {
+        method: "POST",
+        body: form,
+      })
+      const json = await res.json()
+
+      if (json.uploaded) {
+        setPortalUploadResult(json)
+        if (json.uploaded.length > 0) setPortalUploadFile(null)
+        if (!json.success) {
+          setPortalUploadError("Semua file gagal diupload, lihat detail di bawah.")
+        }
+      } else {
+        setPortalUploadError(json.message || "Gagal mengupload")
+      }
+    } catch (err: any) {
+      setPortalUploadError(err.message || "Terjadi kesalahan")
+    } finally {
+      setPortalUploading(false)
     }
   }
 
@@ -400,6 +526,173 @@ export default function SettingsPage() {
         </div>
 
         <SaveButton />
+      </AccordionCard>
+
+      {/* Portal Login Hotspot */}
+      <AccordionCard
+        title="Portal Login Hotspot"
+        subtitle="Download / upload tampilan halaman login"
+        icon={<Globe className="w-4 h-4 text-signal-dark flex-shrink-0" />}
+        isOpen={openCard === "portal"}
+        onToggle={() => toggleCard("portal")}
+      >
+        <div className="bg-paper border border-line rounded-lg p-3 text-xs text-text-secondary space-y-1.5">
+          <p>
+            Mengambil/mengirim isi folder tampilan halaman login hotspot di router
+            (HTML, CSS, gambar) lewat FTP — terpisah dari koneksi API biasa.
+          </p>
+          <p>
+            <span className="font-medium text-text-primary">Sebelum dipakai:</span>{" "}
+            pastikan service FTP aktif (<span className="font-mono">IP → Services → ftp</span>) dan
+            user router ini punya policy <span className="font-mono">ftp</span> (
+            <span className="font-mono">System → Users → Groups</span>).
+          </p>
+        </div>
+
+        <div>
+          <label className={labelClass}>Nama Folder</label>
+          <input
+            type="text"
+            value={portalFolder}
+            onChange={(e) => setPortalFolder(e.target.value)}
+            placeholder="hotspot"
+            className={`${inputClass} font-mono`}
+          />
+          <p className="text-xs text-text-muted mt-1.5">
+            Cek di <span className="font-mono">IP → Hotspot → Server Profiles → HTML Directory</span>{" "}
+            kalau tidak yakin namanya (default: <span className="font-mono">hotspot</span>).
+          </p>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-2">
+          <button
+            type="button"
+            onClick={handleListPortalFolder}
+            disabled={portalListLoading || !activeRouterId}
+            className="flex-1 flex items-center justify-center gap-2 bg-surface border border-line hover:border-signal/40 disabled:opacity-60 text-text-primary font-medium px-4 py-2.5 rounded-lg text-sm transition-colors"
+          >
+            {portalListLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Eye className="w-4 h-4" />
+            )}
+            Lihat Isi Folder
+          </button>
+          <button
+            type="button"
+            onClick={handleDownloadPortalFolder}
+            disabled={portalDownloading || !activeRouterId}
+            className="flex-1 flex items-center justify-center gap-2 bg-signal hover:bg-signal-dark disabled:opacity-60 text-signal-on font-medium px-4 py-2.5 rounded-lg text-sm transition-colors"
+          >
+            {portalDownloading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4" />
+            )}
+            Download .zip
+          </button>
+        </div>
+
+        {portalListError ? (
+          <div className="flex items-start gap-2 bg-danger-soft border border-danger/20 text-danger rounded-lg p-3 text-sm">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            {portalListError}
+          </div>
+        ) : null}
+
+        {portalListing ? (
+          <div className="border border-line rounded-lg max-h-56 overflow-y-auto thin-scroll">
+            <table className="w-full text-xs">
+              <thead className="bg-paper border-b border-line sticky top-0">
+                <tr>
+                  <th className="text-left px-3 py-2 font-medium text-text-secondary">Nama</th>
+                  <th className="text-right px-3 py-2 font-medium text-text-secondary">Ukuran</th>
+                </tr>
+              </thead>
+              <tbody>
+                {portalListing.entries.length === 0 ? (
+                  <tr>
+                    <td colSpan={2} className="px-3 py-4 text-center text-text-muted">
+                      Folder kosong / tidak ditemukan
+                    </td>
+                  </tr>
+                ) : (
+                  portalListing.entries.map((e: any) => (
+                    <tr key={e.path} className="border-b border-line last:border-0">
+                      <td className="px-3 py-1.5 font-mono text-text-primary truncate max-w-[220px]">
+                        {e.isDir ? "📁 " : ""}
+                        {e.path}
+                      </td>
+                      <td className="px-3 py-1.5 text-right font-mono text-text-muted whitespace-nowrap">
+                        {e.isDir ? "-" : `${Math.ceil(e.size / 1024)} KB`}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+
+        {portalDownloadError ? (
+          <div className="flex items-start gap-2 bg-amber-soft border border-amber/20 text-amber rounded-lg p-3 text-sm">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            {portalDownloadError}
+          </div>
+        ) : null}
+
+        <div className="border-t border-line pt-4">
+          <label className={labelClass}>Upload Ulang (.zip)</label>
+          <p className="text-xs text-text-muted mb-2">
+            File yang namanya sama akan ditimpa. File lain yang sudah ada di router dan TIDAK
+            ada di dalam .zip TIDAK akan dihapus.
+          </p>
+          <input
+            type="file"
+            accept=".zip"
+            onChange={(e) => setPortalUploadFile(e.target.files?.[0] || null)}
+            className="block w-full text-sm text-text-secondary file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-signal-soft file:text-signal-dark file:text-sm file:font-medium"
+          />
+
+          <button
+            type="button"
+            onClick={handleUploadPortalFolder}
+            disabled={portalUploading || !portalUploadFile || !activeRouterId}
+            className="mt-3 w-full sm:w-auto flex items-center justify-center gap-2 bg-ink hover:bg-ink-soft disabled:opacity-60 text-white font-medium px-5 py-2.5 rounded-lg text-sm transition-colors"
+          >
+            {portalUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+            Upload &amp; Timpa
+          </button>
+
+          {portalUploadError ? (
+            <div className="mt-3 flex items-start gap-2 bg-danger-soft border border-danger/20 text-danger rounded-lg p-3 text-sm">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              {portalUploadError}
+            </div>
+          ) : null}
+
+          {portalUploadResult ? (
+            <div className="mt-3 bg-signal-soft border border-signal/20 text-signal-dark rounded-lg p-3 text-sm space-y-1">
+              <p className="flex items-center gap-2 font-medium">
+                <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                {portalUploadResult.uploaded.length} dari {portalUploadResult.totalInZip} file di
+                dalam zip berhasil diupload
+              </p>
+              {portalUploadResult.failed?.length > 0 ? (
+                <div className="text-danger text-xs mt-1">
+                  {portalUploadResult.failed.length} file gagal:
+                  <ul className="list-disc list-inside">
+                    {portalUploadResult.failed.slice(0, 5).map((f: any) => (
+                      <li key={f.path}>
+                        {f.path} — {f.message}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       </AccordionCard>
 
       {/* Ganti Password */}
