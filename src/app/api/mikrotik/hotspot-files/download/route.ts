@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
 
     const filename = `${cleanFolder}-${new Date().toISOString().slice(0, 10)}.zip`
 
-    return new NextResponse(zipBuffer, {
+    return new NextResponse(new Uint8Array(zipBuffer), {
       status: 200,
       headers: {
         "Content-Type": "application/zip",
