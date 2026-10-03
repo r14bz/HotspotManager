@@ -44,6 +44,13 @@ export function RouterProvider({ children }: { children: React.ReactNode }) {
           const stillValid = list.find((r) => r.id === saved)
           const initial = stillValid ? saved! : list[0]?.id || null
           setActiveRouterIdState(initial)
+          // Simpan juga router default ke localStorage, supaya halaman
+          // /print (yang membaca router dari localStorage) memakai
+          // pengaturan template yang benar walau router belum pernah
+          // dipilih manual lewat dropdown.
+          if (initial && typeof window !== "undefined") {
+            localStorage.setItem(STORAGE_KEY, initial)
+          }
 
           if (list.length === 0) {
             setError("Belum ada router terdaftar. Tambahkan lewat Supabase dulu.")
