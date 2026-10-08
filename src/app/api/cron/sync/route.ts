@@ -5,7 +5,7 @@ import { syncAllRouters } from "@/lib/sync"
 export const runtime = "nodejs"
 // Sync beberapa router lewat VPN bisa memakan puluhan detik; beri ruang
 // supaya fungsi tidak terpotong di tengah jalan.
-export const maxDuration = 60
+export const maxDuration = 120
 
 // Perbandingan waktu-konstan (lewat hash supaya panjangnya selalu sama).
 function safeEqual(a: string, b: string): boolean {

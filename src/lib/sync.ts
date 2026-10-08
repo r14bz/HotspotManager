@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
-import { withMikrotik } from "@/lib/mikrotik"
+import { withMikrotik, withTimeout } from "@/lib/mikrotik"
 import { defaultSettings, resolvePrice } from "@/lib/settings"
 
 // Ukuran potongan untuk query .in() dan upsert. Sebelumnya semua username
@@ -223,18 +223,49 @@ async function applyMikhmonScriptLog(
 // 2. Voucher sudah terpakai  -> mempertahankan harga saat terjual.
 // 3. price_override = true   -> harga manual, tidak pernah ditimpa sync.
 export async function syncVouchersFromMikrotik(routerId: string) {
-  const { users, active, mikhmonScripts } = await withMikrotik(routerId, async (conn) => {
-    const [users, active, mikhmonScripts] = await Promise.all([
-      conn.write("/ip/hotspot/user/print"),
-      conn.write("/ip/hotspot/active/print"),
-      // Query difilter di sisi MikroTik supaya tidak menarik semua script.
-      conn.write("/system/script/print", ["?comment=mikhmon"]).catch((e: any) => {
-        console.error("Sync: gagal baca /system/script (mikhmon-log dilewati):", e)
-        return []
-      }),
-    ])
-    return { users, active, mikhmonScripts }
-  })
+  const t0 = Date.now()
+  const tag = `[sync ${routerId.slice(0, 8)}]`
+  const mark = (step: string) => console.log(`${tag} ${step} (+${Date.now() - t0} ms)`)
+
+  // Dibaca BERURUTAN dengan batas waktu sendiri-sendiri. Sebelumnya tiga
+  // perintah dijalankan sekaligus tanpa batas waktu: satu perintah yang tidak
+  // dijawab router membuat seluruh sync menggantung sampai fungsi dipotong
+  // Vercel (504). Log "+... ms" di bawah menunjukkan langkah mana yang lambat.
+  const { users, active, mikhmonScripts } = await withMikrotik(
+    routerId,
+    async (conn) => {
+      const users = await withTimeout(
+        conn.write("/ip/hotspot/user/print"),
+        40_000,
+        "Membaca user hotspot"
+      )
+      mark(`user hotspot: ${users?.length ?? 0}`)
+
+      const active = await withTimeout(
+        conn.write("/ip/hotspot/active/print"),
+        25_000,
+        "Membaca user aktif"
+      )
+      mark(`user aktif: ${active?.length ?? 0}`)
+
+      // Opsional (jaring pengaman log mikhmon): kalau lambat/gagal, dilewati
+      // dan sync utama tetap jalan. Query difilter di sisi MikroTik.
+      let mikhmonScripts: any[] = []
+      try {
+        mikhmonScripts = await withTimeout(
+          conn.write("/system/script/print", ["?comment=mikhmon"]),
+          25_000,
+          "Membaca log mikhmon"
+        )
+        mark(`script mikhmon: ${mikhmonScripts?.length ?? 0}`)
+      } catch (e: any) {
+        console.error(`${tag} gagal baca /system/script (mikhmon-log dilewati):`, e?.message || e)
+      }
+      return { users, active, mikhmonScripts }
+    },
+    undefined,
+    60_000
+  )
 
   const activeNames = new Set((active || []).map((u: any) => u.user || u.name))
 
@@ -420,6 +451,7 @@ export async function syncVouchersFromMikrotik(routerId: string) {
     }
   }
 
+  mark(`selesai (voucher: ${list.length}, tersimpan: ${synced})`)
   return { count: list.length, data: list, synced, mikhmonLog }
 }
 

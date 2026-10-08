@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { syncVouchersFromMikrotik } from "@/lib/sync"
+import { MikrotikTimeoutError } from "@/lib/mikrotik"
+
+export const runtime = "nodejs"
+// Batas sendiri di dalam sync (maks ± 80 dtk untuk MikroTik) selalu habis
+// sebelum ini, jadi error yang muncul adalah JSON yang jelas, bukan 504 mentah.
+export const maxDuration = 120
 
 export async function GET(req: NextRequest) {
   const routerId = req.nextUrl.searchParams.get("router_id")
@@ -25,7 +31,7 @@ export async function GET(req: NextRequest) {
         message: error?.message || "Gagal mengambil data dari MikroTik",
         data: [],
       },
-      { status: 500 }
+      { status: error instanceof MikrotikTimeoutError ? 504 : 500 }
     )
   }
 }

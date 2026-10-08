@@ -85,7 +85,19 @@ export default function VoucherListPage() {
 
     try {
       const res = await fetch(`/api/mikrotik/vouchers?router_id=${activeRouterId}`)
-      const json = await res.json()
+      // Kalau server/Vercel membalas teks biasa (mis. 504 timeout), jangan
+      // dipaksa jadi JSON supaya pesannya tidak berupa "Unexpected token".
+      const raw = await res.text()
+      let json: any
+      try {
+        json = JSON.parse(raw)
+      } catch {
+        throw new Error(
+          res.status === 504
+            ? "MikroTik tidak merespons (timeout). Pastikan router online lalu coba lagi."
+            : `Server membalas dengan format tidak valid (HTTP ${res.status}).`
+        )
+      }
 
       if (json.success) {
         let data: Voucher[] = json.data || []
