@@ -46,12 +46,14 @@ TELEGRAM_BOT_TOKEN=
 TELEGRAM_WEBHOOK_SECRET=
 TELEGRAM_ADMIN_USER_ID=
 TELEGRAM_ROUTER_NAME=Mamanaiy.net
+TELEGRAM_ENABLE_WRITES=false
 ```
 
 - `TELEGRAM_BOT_TOKEN`: token dari BotFather.
 - `TELEGRAM_WEBHOOK_SECRET`: secret acak panjang untuk memverifikasi header webhook Telegram.
 - `TELEGRAM_ADMIN_USER_ID`: ID numerik akun Telegram admin pribadi, bukan username.
 - `TELEGRAM_ROUTER_NAME`: nama router persis di tabel `routers`; default `Mamanaiy.net`.
+- `TELEGRAM_ENABLE_WRITES`: harus tetap `false` saat pengujian. Hanya ubah ke `true` setelah smoke test baca-saja dan Anda menyetujui aksi tulis ke router.
 
 Perintah tersedia: `/status`, `/online`, `/vouchers`, `/profiles`, `/sales today`, `/sales month`, `/generate JUMLAH PROFILE HARGA`, `/disable USERNAME`, `/enable USERNAME`, `/disconnect USERNAME`, dan `/router reboot`.
 
