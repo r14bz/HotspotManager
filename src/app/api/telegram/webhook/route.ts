@@ -79,22 +79,26 @@ async function command(chat: number, raw: string) {
     const sales = (data || []).filter(v => !["default", "trial-user", "-"].includes((v.profile_name || "").trim().toLowerCase()) && (v.status === "used" || v.status === "online" || !!v.sold_at || !!v.used_at) && new Date(v.used_at || v.sold_at || v.created_at || 0) >= start && new Date(v.used_at || v.sold_at || v.created_at || 0) < end)
     return send(chat, "Penjualan " + (mode === "today" ? today : month) + " WIB\nRouter: " + ROUTER_NAME + "\nVoucher terpakai: " + sales.length + "\nPendapatan: Rp" + sales.reduce((s, v) => s + (Number(v.price) || 0), 0).toLocaleString("id-ID") + ((data || []).length >= 5000 ? "\nPERINGATAN: hasil mungkin terpotong pada 5.000 baris." : ""))
   }
+  if (cmd === "/generate" && process.env.TELEGRAM_ENABLE_WRITES !== "true") return send(chat, "Mode aman: aksi perubahan router masih dinonaktifkan. Aktifkan TELEGRAM_ENABLE_WRITES=true setelah pengujian dan persetujuan.");
   if (cmd === "/generate") {
     const n = Number(p[1]), profile = p[2], price = Number(p[3])
     if (!Number.isInteger(n) || n < 1 || n > MAX_GENERATE || !profile || profile.length > 24 || !Number.isFinite(price) || price < 0 || !/^[\w./-]+$/.test(profile)) return send(chat, "Format: /generate JUMLAH PROFILE HARGA\nContoh: /generate 3 2jam/2k 2000\nMaksimum 10 voucher.")
     return send(chat, "Konfirmasi generate " + n + " voucher di " + ROUTER_NAME + "\nProfile: " + profile + "\nHarga: Rp" + price.toLocaleString("id-ID"), { reply_markup: { inline_keyboard: [[{ text: "Ya, generate", callback_data: "c|gen|" + n + "|" + profile + "|" + price }, { text: "Batal", callback_data: "c|cancel" }]] } })
   }
+  if (["/disable", "/enable", "/disconnect"].includes(cmd) && process.env.TELEGRAM_ENABLE_WRITES !== "true") return send(chat, "Mode aman: aksi perubahan router masih dinonaktifkan. Aktifkan TELEGRAM_ENABLE_WRITES=true setelah pengujian dan persetujuan.");
   if (["/disable", "/enable", "/disconnect"].includes(cmd)) {
     const username = p[1]
     if (!username || username.length > 32 || !/^[\w.-]+$/.test(username)) return send(chat, "Format: " + cmd + " USERNAME")
     return send(chat, "Konfirmasi " + cmd.slice(1) + " user " + username + " di " + ROUTER_NAME + "?", { reply_markup: { inline_keyboard: [[{ text: "Konfirmasi", callback_data: "c|" + cmd.slice(1) + "|" + username }, { text: "Batal", callback_data: "c|cancel" }]] } })
   }
+  if (cmd === "/router" && p[1] === "reboot" && process.env.TELEGRAM_ENABLE_WRITES !== "true") return send(chat, "Mode aman: reboot router dinonaktifkan. Aktifkan TELEGRAM_ENABLE_WRITES=true hanya setelah pengujian dan persetujuan.");
   if (cmd === "/router" && p[1] === "reboot") return send(chat, "⚠️ Konfirmasi REBOOT router " + ROUTER_NAME + ". Koneksi pengguna akan terputus sementara.", { reply_markup: { inline_keyboard: [[{ text: "Ya, reboot", callback_data: "c|reboot" }, { text: "Batal", callback_data: "c|cancel" }]] } })
   return send(chat, "Perintah tidak dikenal. Kirim /help.")
 }
 async function confirmed(chat: number, raw: string) {
   const p = raw.split("|"), action = p[1]
   if (action === "cancel") return send(chat, "Aksi dibatalkan.")
+  if (process.env.TELEGRAM_ENABLE_WRITES !== "true") return send(chat, "Mode aman: aksi perubahan router dinonaktifkan. TELEGRAM_ENABLE_WRITES belum diaktifkan.")
   if (action === "gen") {
     const n = Number(p[2]), profile = p[3] || "", price = Number(p[4])
     if (!Number.isInteger(n) || n < 1 || n > MAX_GENERATE || !/^[\w./-]{1,24}$/.test(profile) || !Number.isFinite(price) || price < 0) throw new Error("Parameter generate tidak valid")
