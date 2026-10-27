@@ -62,11 +62,31 @@ async function command(chat: number, raw: string) {
     return send(chat, "Profile di " + ROUTER_NAME + ":\n" + (profiles.map(x => "• " + x).join("\n") || "Tidak ada profile terbaca."))
   })
   if (cmd === "/vouchers") {
-    const r = await router(), { data, error } = await db.from("vouchers").select("status,price,profile_name,sold_at,used_at").eq("router_id", r.id)
-    if (error) throw new Error("Gagal membaca voucher")
-    const all = data || [], used = all.filter(v => ["used", "online"].includes(v.status || "") || !!v.sold_at || !!v.used_at)
+    const r = await router()
+    // Supabase REST defaults to a limited page (often 1,000 rows). Read every page
+    // so imported Mikhmon history is included in the summary.
+    const pageSize = 1000
+    const all: { status: string | null; price: number | string | null; profile_name: string | null; sold_at: string | null; used_at: string | null }[] = []
+    for (let offset = 0; ; offset += pageSize) {
+      const { data, error } = await db.from("vouchers")
+        .select("status,price,profile_name,sold_at,used_at")
+        .eq("router_id", r.id)
+        .order("created_at", { ascending: true })
+        .range(offset, offset + pageSize - 1)
+      if (error) throw new Error("Gagal membaca voucher dari Supabase")
+      const page = data || []
+      all.push(...page)
+      if (page.length < pageSize) break
+    }
     const unused = all.filter(v => v.status === "unused")
-    return send(chat, "Voucher " + ROUTER_NAME + "\nTotal: " + all.length + "\nBelum dipakai: " + unused.length + "\nTerpakai/terjual: " + used.length + "\nNilai terpakai: Rp" + used.reduce((s, v) => s + (Number(v.price) || 0), 0).toLocaleString("id-ID"))
+    const used = all.filter(v => ["used", "online"].includes((v.status || "").toLowerCase()) || !!v.sold_at || !!v.used_at)
+    const disabled = all.filter(v => (v.status || "").toLowerCase() === "disabled")
+    return send(chat, "Voucher " + ROUTER_NAME +
+      "\\nTotal: " + all.length +
+      "\\nBelum dipakai: " + unused.length +
+      "\\nTerpakai/terjual: " + used.length +
+      (disabled.length ? "\\nDinonaktifkan: " + disabled.length : "") +
+      "\\nNilai terpakai: Rp" + used.reduce((s, v) => s + (Number(v.price) || 0), 0).toLocaleString("id-ID"))
   }
   if (cmd === "/sales") {
     const mode = (p[1] || "today").toLowerCase()
