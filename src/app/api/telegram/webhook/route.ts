@@ -145,7 +145,23 @@ export async function POST(req: NextRequest) {
     const update = await req.json(), m = update.message
     if (m) {
       if (!allowed(m.from?.id, m.chat?.type)) return NextResponse.json({ ok: true })
-      if (typeof m.text === "string" && m.text.trim()) await command(Number(m.chat.id), m.text)
+      if (typeof m.text === "string" && m.text.trim()) {
+        const chatId = Number(m.chat.id)
+        const raw = m.text.trim()
+        const cmd = (raw.split(/\\s+/)[0] || "").toLowerCase()
+        try {
+          await command(chatId, raw)
+        } catch (e) {
+          // Keep the webhook responsive when the VPN/router is unreachable.
+          // Log only the command and error message; never log credentials or tokens.
+          console.error("Telegram command failed", cmd, e instanceof Error ? e.message : "unknown")
+          if (["/status", "/online", "/profiles"].includes(cmd)) {
+            await send(chatId, "MikroTik tidak dapat dijangkau saat ini. VPN Murah Jogja mungkin sedang offline, atau koneksi/API router tidak merespons. Silakan coba lagi nanti. Mikrhoman juga dapat mengalami gangguan selama endpoint VPN offline.")
+          } else {
+            await send(chatId, "Perintah gagal diproses. Periksa koneksi database/router lalu coba lagi. Jika masalah berlanjut, periksa log runtime Vercel.")
+          }
+        }
+      }
       return NextResponse.json({ ok: true })
     }
     const cb = update.callback_query
