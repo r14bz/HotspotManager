@@ -35,6 +35,38 @@ Dibangun dengan Next.js, terhubung ke MikroTik lewat RouterOS API (via VPN), dan
 - Login admin terpisah dari user MikroTik, dengan rate-limit percobaan login
 - Row Level Security (RLS) di Supabase
 
+## Telegram Admin Bot (feature branch)
+
+Webhook bot Telegram tersedia di `/api/telegram/webhook`. Bot hanya merespons ID Telegram yang diizinkan dan chat pribadi. Perubahan router (generate voucher, enable/disable user, disconnect, reboot) membutuhkan konfirmasi inline.
+
+Tambahkan environment variables berikut di Vercel Preview (jangan taruh token di Git):
+
+```bash
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_WEBHOOK_SECRET=
+TELEGRAM_ADMIN_USER_ID=
+TELEGRAM_ROUTER_NAME=Mamanaiy.net
+TELEGRAM_ENABLE_WRITES=false
+```
+
+- `TELEGRAM_BOT_TOKEN`: token dari BotFather.
+- `TELEGRAM_WEBHOOK_SECRET`: secret acak panjang untuk memverifikasi header webhook Telegram.
+- `TELEGRAM_ADMIN_USER_ID`: ID numerik akun Telegram admin pribadi, bukan username.
+- `TELEGRAM_ROUTER_NAME`: nama router persis di tabel `routers`; default `Mamanaiy.net`.
+- `TELEGRAM_ENABLE_WRITES`: harus tetap `false` saat pengujian. Hanya ubah ke `true` setelah smoke test baca-saja dan Anda menyetujui aksi tulis ke router.
+
+Perintah tersedia: `/status`, `/online`, `/vouchers`, `/profiles`, `/sales today`, `/sales month`, `/generate JUMLAH PROFILE HARGA`, `/disable USERNAME`, `/enable USERNAME`, `/disconnect USERNAME`, dan `/router reboot`.
+
+**Jangan set webhook ke production sebelum preview diuji.** Setelah deployment Preview siap, pasang webhook menggunakan token bot dan URL Preview yang benar:
+
+```bash
+curl -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
+  -d "url=https://PREVIEW_HOST/api/telegram/webhook" \
+  -d "secret_token=$TELEGRAM_WEBHOOK_SECRET"
+```
+
+Uji dahulu perintah baca-saja. Jangan menguji generate, disconnect, enable/disable, atau reboot pada router produksi tanpa persetujuan eksplisit. Jangan pernah memasukkan token Telegram atau service-role key ke GitHub/chat.
+
 ## Tech Stack
 
 - [Next.js](https://nextjs.org) 16 (App Router, Turbopack)
